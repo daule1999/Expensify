@@ -73,6 +73,12 @@ export const smsService = {
                  address: 'MOM',
                  body: 'Hello beta, sent you some money.',
                  date: Date.now() - 1000,
+            },
+            {
+                _id: '5',
+                address: 'HDFC-SALARY',
+                body: 'Rs. 50000.00 credited to a/c 1234 on 30-01-26. Salary for Jan.',
+                date: Date.now() - 2000000,
             }
         ];
     }
@@ -147,40 +153,69 @@ export const smsService = {
               rawString
           );
 
-          // 3. Check if exists
-          const existing = await db.getAllAsync(
-              `SELECT id FROM expenses WHERE description LIKE ? AND amount = ?`,
-              [`%HASH:${hash}%`, parsed.amount]
-          );
-
-          if (existing.length > 0) {
-              continue; // Duplicate found, skip
-          }
-
-          // 4. Insert New Transaction
+          // 3. Check if exists & Insert based on type
           const descriptionWithHash = `${parsed.originalSms.substring(0, 50)}... [HASH:${hash}]`;
 
-          // Determine category based on keywords
-          let category = 'Uncategorized';
-          const lowerBody = parsed.originalSms.toLowerCase();
-          if (lowerBody.includes('zomato') || lowerBody.includes('swiggy') || lowerBody.includes('food')) category = 'Food';
-          else if (lowerBody.includes('uber') || lowerBody.includes('ola') || lowerBody.includes('travel')) category = 'Transport';
-          else if (lowerBody.includes('bill') || lowerBody.includes('recharge') || lowerBody.includes('electricity')) category = 'Bills';
+          if (parsed.type === 'debit') {
+              // Expense Logic
+              const existing = await db.getAllAsync(
+                  `SELECT id FROM expenses WHERE description LIKE ? AND amount = ?`,
+                  [`%HASH:${hash}%`, parsed.amount]
+              );
 
-          await db.runAsync(
-              `INSERT INTO expenses (id, amount, category, description, date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-              [
-                  Crypto.randomUUID(), // Replaced uuidv4() with Crypto.randomUUID()
-                  parsed.amount,
-                  category,
-                  descriptionWithHash,
-                  parsed.date,
-                  Date.now(),
-                  Date.now()
-              ]
-          );
-          
-          addedCount++;
+              if (existing.length > 0) continue; // Duplicate found
+
+              // Determine category based on keywords
+              let category = 'Uncategorized';
+              const lowerBody = parsed.originalSms.toLowerCase();
+              if (lowerBody.includes('zomato') || lowerBody.includes('swiggy') || lowerBody.includes('food')) category = 'Food';
+              else if (lowerBody.includes('uber') || lowerBody.includes('ola') || lowerBody.includes('travel')) category = 'Transport';
+              else if (lowerBody.includes('bill') || lowerBody.includes('recharge') || lowerBody.includes('electricity')) category = 'Bills';
+
+              await db.runAsync(
+                  `INSERT INTO expenses (id, amount, category, description, date, created_at, updated_at, account) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                  [
+                      Crypto.randomUUID(),
+                      parsed.amount,
+                      category,
+                      descriptionWithHash,
+                      parsed.date,
+                      Date.now(),
+                      Date.now(),
+                      parsed.account !== 'Unknown' ? `Bank (${parsed.account})` : 'Cash'
+                  ]
+              );
+              addedCount++;
+
+          } else if (parsed.type === 'credit') {
+              // Income Logic
+              const existing = await db.getAllAsync(
+                  `SELECT id FROM income WHERE description LIKE ? AND amount = ?`,
+                  [`%HASH:${hash}%`, parsed.amount]
+              );
+
+              if (existing.length > 0) continue; // Duplicate found
+
+              // Determine source
+              let source = parsed.merchant; // For income, merchant is essentially the source
+              if (source === 'Unknown Merchant') source = 'Other Income';
+              if (parsed.originalSms.toLowerCase().includes('salary')) source = 'Salary';
+
+              await db.runAsync(
+                  `INSERT INTO income (id, amount, source, description, date, created_at, updated_at, account) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                  [
+                      Crypto.randomUUID(),
+                      parsed.amount,
+                      source,
+                      descriptionWithHash,
+                      parsed.date,
+                      Date.now(),
+                      Date.now(),
+                      parsed.account !== 'Unknown' ? `Bank (${parsed.account})` : 'Cash'
+                  ]
+              );
+              addedCount++;
+          }
       }
 
       return { total, processed: processedCount, added: addedCount };

@@ -79,4 +79,7 @@ backups/
 *.key
 
 # Metro
-.metro/
+
+# Native
+android/
+ios/

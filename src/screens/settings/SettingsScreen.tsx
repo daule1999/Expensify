@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Switch, TextInput, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Switch, TextInput, Modal, Platform, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +11,8 @@ import { settingsService, PrivacySettings, ProfileSettings } from '../../service
 import { transactionService } from '../../services/transaction.service';
 import { exportService } from '../../services/export.service';
 import { importService } from '../../services/import.service';
+import { smsService } from '../../services/sms.service';
+
 import { usePrivacy } from '../../contexts/PrivacyContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { GOOGLE_AUTH_CONFIG } from '../../config/auth';
@@ -25,6 +27,51 @@ export const SettingsScreen = () => {
     const navigation = useNavigation();
     const { refreshSettings } = usePrivacy();
     const { theme, isDark, toggleTheme } = useTheme();
+
+    const [isSyncing, setIsSyncing] = useState(false);
+
+    const handleSyncSms = async () => {
+        if (Platform.OS !== 'android') {
+            Alert.alert('Not Supported', 'SMS Sync is only available on Android devices.');
+            return;
+        }
+
+        try {
+            const hasPermission = await smsService.checkPermission();
+            if (!hasPermission) {
+                Alert.alert('Permission Denied', 'SMS permission is required to sync transactions.');
+                return;
+            }
+
+            Alert.alert(
+                'Sync SMS',
+                'This will scan your SMS inbox for transaction messages. This might take a moment.',
+                [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                        text: 'Start Sync',
+                        onPress: async () => {
+                            setIsSyncing(true);
+                            try {
+                                const result = await smsService.syncAllTransactions();
+                                Alert.alert(
+                                    'Sync Complete',
+                                    `Processed ${result.processed} messages.\nAdded ${result.added} new transactions.`
+                                );
+                            } catch (error) {
+                                Alert.alert('Error', 'Failed to sync SMS transactions.');
+                                console.error(error);
+                            } finally {
+                                setIsSyncing(false);
+                            }
+                        }
+                    }
+                ]
+            );
+        } catch (error) {
+            Alert.alert('Error', 'An error occurred while checking permissions.');
+        }
+    };
 
     const [privacySettings, setPrivacySettings] = useState<PrivacySettings | null>(null);
     const [profileSettings, setProfileSettings] = useState<ProfileSettings | null>(null);
@@ -452,6 +499,20 @@ export const SettingsScreen = () => {
                         <Text style={[styles.menuText, { color: theme.colors.text }]}>Import Data</Text>
                         <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
                     </TouchableOpacity>
+                    <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+
+                    <TouchableOpacity style={styles.menuItem} onPress={handleSyncSms} disabled={isSyncing}>
+                        <Ionicons name="chatbubbles-outline" size={24} color={theme.colors.primary} />
+                        <View style={{ flex: 1 }}>
+                            <Text style={[styles.menuText, { color: theme.colors.text }]}>Sync from SMS</Text>
+                            <Text style={[styles.settingHint, { color: theme.colors.textSecondary }]}>Scan inbox for expenses</Text>
+                        </View>
+                        {isSyncing ? (
+                            <ActivityIndicator size="small" color={theme.colors.primary} />
+                        ) : (
+                            <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
+                        )}
+                    </TouchableOpacity>
                 </GlassCard>
 
                 {/* Version Info */}
@@ -517,5 +578,55 @@ const styles = StyleSheet.create({
         marginTop: 20,
         marginBottom: 40,
         opacity: 0.5,
-    }
+    },
+    modalOverlay: {
+        flex: 1,
+        justifyContent: 'center',
+        padding: 20,
+    },
+    modalContent: {
+        padding: 20,
+        borderRadius: 20,
+    },
+    modalTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        marginBottom: 8,
+        textAlign: 'center',
+    },
+    modalSubtitle: {
+        fontSize: 14,
+        textAlign: 'center',
+        marginBottom: 20,
+    },
+    inputLabel: {
+        fontSize: 14,
+        marginBottom: 6,
+        marginTop: 10,
+        fontWeight: '600',
+    },
+    modalButtons: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginTop: 20,
+        gap: 12,
+    },
+    modalButton: {
+        flex: 1,
+        padding: 14,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    configButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        alignSelf: 'flex-end',
+        padding: 8,
+        gap: 4,
+        marginBottom: 8,
+    },
+    configButtonText: {
+        fontSize: 12,
+    },
 });
