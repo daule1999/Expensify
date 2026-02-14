@@ -29,5 +29,31 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Android Development Client
-        run: eas build --profile development --platform android --non-interactive
+      - name: Build Android Preview APK
+        id: build
+        run: |
+          eas build --profile preview --platform android --non-interactive --json > build.json
+          cat build.json
+
+      - name: Download APK
+        run: |
+          URL=$(jq -r '.[0].artifacts.buildUrl' build.json)
+          if [ "$URL" == "null" ]; then
+            echo "Error: Could not find build URL"
+            exit 1
+          fi
+          echo "Downloading from $URL"
+          curl -L -o expensify-preview.apk "$URL"
+
+      - name: Commit and Push APK
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git add expensify-preview.apk
+          # Check if there are changes to commit
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: update preview build apk [skip ci]"
+            git push
+          fi
