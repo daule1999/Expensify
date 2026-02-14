@@ -28,7 +28,7 @@ export const smsService = {
         PermissionsAndroid.PERMISSIONS.READ_SMS,
         {
           title: 'SMS Permission',
-          message: 'Expense Tracker needs access to your SMS to auto-detect expenses.',
+          message: 'Expensify needs access to your SMS to auto-detect expenses.',
           buttonNeutral: 'Ask Me Later',
           buttonNegative: 'Cancel',
           buttonPositive: 'OK',

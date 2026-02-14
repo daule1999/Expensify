@@ -1,4 +1,4 @@
-# Expense Tracker - React Native App
+# Expensify - React Native App
 
 A comprehensive offline-first expense tracking application with encryption, analytics, and automated transaction reading.
 

@@ -71,7 +71,7 @@ export const UnlockScreen: React.FC<UnlockScreenProps> = ({ onUnlock }) => {
         >
             <View style={styles.content}>
                 <Text style={styles.icon}>🔒</Text>
-                <Text style={[styles.title, { color: theme.colors.text }]}>Expense Tracker</Text>
+                <Text style={[styles.title, { color: theme.colors.text }]}>Expensify</Text>
                 <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>Enter your master password to unlock</Text>
 
                 <TextInput

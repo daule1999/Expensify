@@ -1,7 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 
 // Open database
-const db = SQLite.openDatabaseSync('expensetracker.db');
+const db = SQLite.openDatabaseSync('expensify.db');
 
 // Helper function to generate unique IDs
 export const generateId = (): string => {
