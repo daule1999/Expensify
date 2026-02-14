@@ -1,0 +1,148 @@
+import { appSchema, tableSchema } from '@nozbe/watermelondb';
+
+export const schema = appSchema({
+  version: 1,
+  tables: [
+    tableSchema({
+      name: 'expenses',
+      columns: [
+        { name: 'amount', type: 'number' },
+        { name: 'category', type: 'string' },
+        { name: 'subcategory', type: 'string', isOptional: true },
+        { name: 'description', type: 'string', isOptional: true },
+        { name: 'date', type: 'number' },
+        { name: 'payment_method', type: 'string', isOptional: true },
+        { name: 'tags', type: 'string', isOptional: true }, // JSON array
+        { name: 'is_recurring', type: 'boolean' },
+        { name: 'created_at', type: 'number' },
+        { name: 'updated_at', type: 'number' },
+      ],
+    }),
+    tableSchema({
+      name: 'income',
+      columns: [
+        { name: 'amount', type: 'number' },
+        { name: 'source', type: 'string' },
+        { name: 'description', type: 'string', isOptional: true },
+        { name: 'date', type: 'number' },
+        { name: 'created_at', type: 'number' },
+        { name: 'updated_at', type: 'number' },
+      ],
+    }),
+    tableSchema({
+      name: 'investments',
+      columns: [
+        { name: 'name', type: 'string' },
+        { name: 'type', type: 'string' },
+        { name: 'amount_invested', type: 'number' },
+        { name: 'current_value', type: 'number', isOptional: true },
+        { name: 'purchase_date', type: 'number' },
+        { name: 'notes', type: 'string', isOptional: true },
+        { name: 'created_at', type: 'number' },
+        { name: 'updated_at', type: 'number' },
+      ],
+    }),
+    tableSchema({
+      name: 'accounts',
+      columns: [
+        { name: 'name', type: 'string' },
+        { name: 'type', type: 'string' },
+        { name: 'balance', type: 'number' },
+        { name: 'last_updated', type: 'number' },
+        { name: 'created_at', type: 'number' },
+        { name: 'updated_at', type: 'number' },
+      ],
+    }),
+    tableSchema({
+      name: 'debts',
+      columns: [
+        { name: 'name', type: 'string' },
+        { name: 'principal_amount', type: 'number' },
+        { name: 'remaining_amount', type: 'number' },
+        { name: 'interest_rate', type: 'number', isOptional: true },
+        { name: 'start_date', type: 'number' },
+        { name: 'due_date', type: 'number', isOptional: true },
+        { name: 'creditor', type: 'string', isOptional: true },
+        { name: 'notes', type: 'string', isOptional: true },
+        { name: 'created_at', type: 'number' },
+        { name: 'updated_at', type: 'number' },
+      ],
+    }),
+    tableSchema({
+      name: 'emis',
+      columns: [
+        { name: 'debt_id', type: 'string', isOptional: true, isIndexed: true },
+        { name: 'name', type: 'string' },
+        { name: 'amount', type: 'number' },
+        { name: 'start_date', type: 'number' },
+        { name: 'end_date', type: 'number' },
+        { name: 'payment_day', type: 'number' },
+        { name: 'is_active', type: 'boolean' },
+        { name: 'created_at', type: 'number' },
+        { name: 'updated_at', type: 'number' },
+      ],
+    }),
+    tableSchema({
+      name: 'subscriptions',
+      columns: [
+        { name: 'name', type: 'string' },
+        { name: 'amount', type: 'number' },
+        { name: 'billing_cycle', type: 'string' },
+        { name: 'start_date', type: 'number' },
+        { name: 'end_date', type: 'number', isOptional: true },
+        { name: 'next_billing_date', type: 'number', isOptional: true },
+        { name: 'category', type: 'string', isOptional: true },
+        { name: 'is_active', type: 'boolean' },
+        { name: 'auto_renew', type: 'boolean' },
+        { name: 'created_at', type: 'number' },
+        { name: 'updated_at', type: 'number' },
+      ],
+    }),
+    tableSchema({
+      name: 'categories',
+      columns: [
+        { name: 'name', type: 'string' },
+        { name: 'type', type: 'string' },
+        { name: 'icon', type: 'string', isOptional: true },
+        { name: 'color', type: 'string', isOptional: true },
+        { name: 'parent_id', type: 'string', isOptional: true, isIndexed: true },
+        { name: 'created_at', type: 'number' },
+      ],
+    }),
+    tableSchema({
+      name: 'backup_metadata',
+      columns: [
+        { name: 'backup_date', type: 'number' },
+        { name: 'file_path', type: 'string' },
+        { name: 'file_size', type: 'number', isOptional: true },
+        { name: 'checksum', type: 'string', isOptional: true },
+        { name: 'is_encrypted', type: 'boolean' },
+      ],
+    }),
+    tableSchema({
+      name: 'audit_logs',
+      columns: [
+        { name: 'action', type: 'string' },
+        { name: 'entity_type', type: 'string' },
+        { name: 'entity_id', type: 'string' },
+        { name: 'old_value', type: 'string', isOptional: true },
+        { name: 'new_value', type: 'string', isOptional: true },
+        { name: 'user_id', type: 'string', isOptional: true },
+        { name: 'timestamp', type: 'number' },
+        { name: 'metadata', type: 'string', isOptional: true },
+      ],
+    }),
+    tableSchema({
+      name: 'assets',
+      columns: [
+        { name: 'name', type: 'string' },
+        { name: 'type', type: 'string' },
+        { name: 'value', type: 'number' },
+        { name: 'purchase_date', type: 'number' },
+        { name: 'notes', type: 'string', isOptional: true },
+        { name: 'created_at', type: 'number' },
+        { name: 'updated_at', type: 'number' },
+      ],
+    }),
+  ],
+});

@@ -1,0 +1,234 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+export interface CustomField {
+  id: string;
+  name: string;
+  type: 'text' | 'number' | 'date' | 'select';
+  options?: string[]; // For select type
+  required: boolean;
+  enabled: boolean;
+}
+
+export interface ExpenseSettings {
+  categoryLabel: string; // e.g., "Category" or "Tags"
+  dateFormat: string; // e.g., "MM/DD/YYYY" or "DD/MM/YYYY"
+  defaultCategories: string[];
+  customFields: CustomField[];
+}
+
+export interface IncomeSettings {
+  sourceLabel: string;
+  dateFormat: string;
+  defaultSources: string[];
+  customFields: CustomField[];
+}
+
+export interface PrivacySettings {
+  hideAmounts: boolean;
+  requirePasswordToUnhide: boolean;
+  useBiometric: boolean; // Use fingerprint/face ID instead of password
+}
+
+export interface ProfileSettings {
+  name: string;
+  email: string;
+  currency: string;
+  avatarUrl?: string;
+}
+
+export interface AccountSettings {
+  accounts: string[]; // List of bank account names
+  defaultAccount: string; // Default account for new transactions
+}
+
+const DEFAULT_EXPENSE_SETTINGS: ExpenseSettings = {
+  categoryLabel: 'Category',
+  dateFormat: 'DD/MM/YYYY',
+  defaultCategories: ['Food', 'Transport', 'Shopping', 'Entertainment', 'Bills', 'Health', 'Education', 'Other'],
+  customFields: []
+};
+
+const DEFAULT_INCOME_SETTINGS: IncomeSettings = {
+  sourceLabel: 'Source',
+  dateFormat: 'DD/MM/YYYY',
+  defaultSources: ['Salary', 'Business', 'Freelance', 'Investment', 'Gift', 'Other'],
+  customFields: []
+};
+
+const DEFAULT_PRIVACY_SETTINGS: PrivacySettings = {
+  hideAmounts: false,
+  requirePasswordToUnhide: false,
+  useBiometric: false
+};
+
+const DEFAULT_PROFILE_SETTINGS: ProfileSettings = {
+  name: 'User',
+  email: '',
+  currency: '₹',
+  avatarUrl: undefined
+};
+
+const DEFAULT_ACCOUNT_SETTINGS: AccountSettings = {
+  accounts: ['Cash'], // Cash is always available
+  defaultAccount: 'Cash'
+};
+
+const EXPENSE_SETTINGS_KEY = '@expense_settings';
+const INCOME_SETTINGS_KEY = '@income_settings';
+const PRIVACY_SETTINGS_KEY = '@privacy_settings';
+const PROFILE_SETTINGS_KEY = '@profile_settings';
+const ACCOUNT_SETTINGS_KEY = '@account_settings';
+
+export const settingsService = {
+  // Expense Settings
+  getExpenseSettings: async (): Promise<ExpenseSettings> => {
+    try {
+      const data = await AsyncStorage.getItem(EXPENSE_SETTINGS_KEY);
+      return data ? JSON.parse(data) : DEFAULT_EXPENSE_SETTINGS;
+    } catch (error) {
+      console.error('Failed to load expense settings:', error);
+      return DEFAULT_EXPENSE_SETTINGS;
+    }
+  },
+
+  saveExpenseSettings: async (settings: ExpenseSettings): Promise<void> => {
+    try {
+      await AsyncStorage.setItem(EXPENSE_SETTINGS_KEY, JSON.stringify(settings));
+    } catch (error) {
+      console.error('Failed to save expense settings:', error);
+      throw error;
+    }
+  },
+
+  resetExpenseSettings: async (): Promise<void> => {
+    await AsyncStorage.setItem(EXPENSE_SETTINGS_KEY, JSON.stringify(DEFAULT_EXPENSE_SETTINGS));
+  },
+
+  // Income Settings
+  getIncomeSettings: async (): Promise<IncomeSettings> => {
+    try {
+      const data = await AsyncStorage.getItem(INCOME_SETTINGS_KEY);
+      return data ? JSON.parse(data) : DEFAULT_INCOME_SETTINGS;
+    } catch (error) {
+      console.error('Failed to load income settings:', error);
+      return DEFAULT_INCOME_SETTINGS;
+    }
+  },
+
+  saveIncomeSettings: async (settings: IncomeSettings): Promise<void> => {
+    try {
+      await AsyncStorage.setItem(INCOME_SETTINGS_KEY, JSON.stringify(settings));
+    } catch (error) {
+      console.error('Failed to save income settings:', error);
+      throw error;
+    }
+  },
+
+  resetIncomeSettings: async (): Promise<void> => {
+    await AsyncStorage.setItem(INCOME_SETTINGS_KEY, JSON.stringify(DEFAULT_INCOME_SETTINGS));
+  },
+
+  // Privacy Settings
+  getPrivacySettings: async (): Promise<PrivacySettings> => {
+    try {
+      const data = await AsyncStorage.getItem(PRIVACY_SETTINGS_KEY);
+      return data ? JSON.parse(data) : DEFAULT_PRIVACY_SETTINGS;
+    } catch (error) {
+      console.error('Failed to load privacy settings:', error);
+      return DEFAULT_PRIVACY_SETTINGS;
+    }
+  },
+
+  savePrivacySettings: async (settings: PrivacySettings): Promise<void> => {
+    try {
+      await AsyncStorage.setItem(PRIVACY_SETTINGS_KEY, JSON.stringify(settings));
+    } catch (error) {
+      console.error('Failed to save privacy settings:', error);
+      throw error;
+    }
+  },
+
+  // Profile Settings
+  getProfileSettings: async (): Promise<ProfileSettings> => {
+    try {
+      const data = await AsyncStorage.getItem(PROFILE_SETTINGS_KEY);
+      return data ? JSON.parse(data) : DEFAULT_PROFILE_SETTINGS;
+    } catch (error) {
+      console.error('Failed to load profile settings:', error);
+      return DEFAULT_PROFILE_SETTINGS;
+    }
+  },
+
+  saveProfileSettings: async (settings: ProfileSettings): Promise<void> => {
+    try {
+      await AsyncStorage.setItem(PROFILE_SETTINGS_KEY, JSON.stringify(settings));
+    } catch (error) {
+      console.error('Failed to save profile settings:', error);
+      throw error;
+    }
+  },
+
+  // Helper: Simple password hashing (for demo - use proper crypto in production)
+  hashPassword: (password: string): string => {
+    // Simple hash for demo purposes - in production use proper crypto
+    return Buffer.from(password).toString('base64');
+  },
+
+  verifyPassword: (input: string, hashed: string): boolean => {
+    return Buffer.from(input).toString('base64') === hashed;
+  },
+
+  // Helper: Format date according to settings
+  formatDate: (timestamp: number, format: string): string => {
+    const date = new Date(timestamp);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+
+    switch (format) {
+      case 'MM/DD/YYYY':
+        return `${month}/${day}/${year}`;
+      case 'DD/MM/YYYY':
+        return `${day}/${month}/${year}`;
+      case 'YYYY-MM-DD':
+        return `${year}-${month}-${day}`;
+      default:
+        return date.toLocaleDateString();
+    }
+  },
+
+  // Helper: Format amount (hide if privacy enabled)
+  formatAmount: (amount: number, hideAmounts: boolean, currency: string = '₹'): string => {
+    if (hideAmounts) {
+      return '****';
+    }
+    return `${currency}${amount.toLocaleString()}`;
+  },
+
+  // Account Settings
+  getAccountSettings: async (): Promise<AccountSettings> => {
+    try {
+      const data = await AsyncStorage.getItem(ACCOUNT_SETTINGS_KEY);
+      if (data) {
+        return JSON.parse(data);
+      }
+      return DEFAULT_ACCOUNT_SETTINGS;
+    } catch (error) {
+      console.error('Error loading account settings:', error);
+      return DEFAULT_ACCOUNT_SETTINGS;
+    }
+  },
+
+  saveAccountSettings: async (settings: AccountSettings): Promise<void> => {
+    try {
+      // Ensure 'Cash' is always in the accounts list
+      if (!settings.accounts.includes('Cash')) {
+        settings.accounts.unshift('Cash');
+      }
+      await AsyncStorage.setItem(ACCOUNT_SETTINGS_KEY, JSON.stringify(settings));
+    } catch (error) {
+      console.error('Error saving account settings:', error);
+      throw error;
+    }
+  },
+};
