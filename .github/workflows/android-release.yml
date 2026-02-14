@@ -29,5 +29,5 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build APK (Preview Profile)
-        run: eas build --profile preview --platform android --non-interactive
+      - name: Build Android Development Client
+        run: eas build --profile development --platform android --non-interactive

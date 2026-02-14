@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Expense Tracker",
+    "name": "Expensify",
     "slug": "expensify",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -50,7 +50,8 @@
           }
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-asset"
     ],
     "extra": {
       "eas": {
