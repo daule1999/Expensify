@@ -89,14 +89,23 @@ export const DashboardScreen = () => {
 
     const formatCurrency = (amount: number) => {
         if (isAmountHidden) return '****';
-        return `₹${amount.toLocaleString('en-IN')}`;
+        return `₹${amount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+    };
+
+    const formatCompact = (amount: number) => {
+        if (isAmountHidden) return '****';
+        if (Math.abs(amount) >= 10000000) return `₹${(amount / 10000000).toFixed(2)}Cr`;
+        if (Math.abs(amount) >= 100000) return `₹${(amount / 100000).toFixed(2)}L`;
+        if (Math.abs(amount) >= 1000) return `₹${(amount / 1000).toFixed(1)}K`;
+        return `₹${amount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
     };
 
     // Chart Data Preparation
     const categoryData = transactions
         .filter(t => t.type === 'expense')
         .reduce((acc, t) => {
-            acc[t.category] = (acc[t.category] || 0) + t.amount;
+            const cat = t.category || 'Uncategorized';
+            acc[cat] = (acc[cat] || 0) + t.amount;
             return acc;
         }, {} as Record<string, number>);
 
@@ -145,7 +154,11 @@ export const DashboardScreen = () => {
                             />
                         </TouchableOpacity>
                     </View>
-                    <Text style={[styles.netWorthValue, { color: isDark ? theme.colors.primary : theme.colors.text }]}>
+                    <Text
+                        style={[styles.netWorthValue, { color: isDark ? theme.colors.primary : theme.colors.text }]}
+                        adjustsFontSizeToFit
+                        numberOfLines={1}
+                    >
                         {formatCurrency(netWorth)}
                     </Text>
                 </View>
@@ -154,18 +167,29 @@ export const DashboardScreen = () => {
                 <View style={styles.chartContainer}>
                     <PieChart
                         data={chartData}
-                        width={screenWidth}
-                        height={240}
+                        width={screenWidth - 40}
+                        height={200}
                         chartConfig={{
                             color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
                         }}
                         accessor={"population"}
                         backgroundColor={"transparent"}
-                        paddingLeft={"15"}
-                        center={[10, 0]}
+                        paddingLeft={"0"}
+                        center={[0, 0]}
                         absolute
-                        hasLegend={true}
+                        hasLegend={false}
                     />
+                    {/* Custom Legend */}
+                    <View style={styles.legendContainer}>
+                        {chartData.map((item, index) => (
+                            <View key={index} style={styles.legendItem}>
+                                <View style={[styles.legendDot, { backgroundColor: item.color }]} />
+                                <Text style={[styles.legendText, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+                                    {formatCompact(item.population)} {item.name}
+                                </Text>
+                            </View>
+                        ))}
+                    </View>
                 </View>
 
                 {/* Income / Expense Summary Row */}
@@ -173,9 +197,9 @@ export const DashboardScreen = () => {
                     <GlassCard style={styles.summaryCard}>
                         <View style={styles.summaryContent}>
                             <Ionicons name="arrow-down-circle" size={24} color={theme.colors.success} />
-                            <View>
+                            <View style={{ flex: 1 }}>
                                 <Text style={[styles.summaryLabel, { color: theme.colors.textSecondary }]}>Income</Text>
-                                <Text style={[styles.summaryValue, { color: theme.colors.text }]}>{formatCurrency(totalIncome)}</Text>
+                                <Text style={[styles.summaryValue, { color: theme.colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatCompact(totalIncome)}</Text>
                             </View>
                         </View>
                     </GlassCard>
@@ -183,9 +207,9 @@ export const DashboardScreen = () => {
                     <GlassCard style={styles.summaryCard}>
                         <View style={styles.summaryContent}>
                             <Ionicons name="arrow-up-circle" size={24} color={theme.colors.error} />
-                            <View>
+                            <View style={{ flex: 1 }}>
                                 <Text style={[styles.summaryLabel, { color: theme.colors.textSecondary }]}>Expense</Text>
-                                <Text style={[styles.summaryValue, { color: theme.colors.text }]}>{formatCurrency(totalExpense)}</Text>
+                                <Text style={[styles.summaryValue, { color: theme.colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatCompact(totalExpense)}</Text>
                             </View>
                         </View>
                     </GlassCard>
@@ -252,7 +276,7 @@ export const DashboardScreen = () => {
                 {/* Recent Activity (Mini List) */}
                 <View style={styles.sectionHeader}>
                     <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Recent Activity</Text>
-                    <TouchableOpacity onPress={() => navigation.navigate('Expenses', { screen: 'ExpensesList' })}>
+                    <TouchableOpacity onPress={() => (navigation as any).navigate('Expenses', { screen: 'ExpensesList' })}>
                         <Text style={[styles.seeAllText, { color: theme.colors.primary }]}>View All</Text>
                     </TouchableOpacity>
                 </View>
@@ -282,7 +306,7 @@ export const DashboardScreen = () => {
                 onPress={() => {
                     // TODO: Expand or show Action Sheet for Income/Expense
                     // For now, default to Expense as per old behavior, but user can navigate back
-                    navigation.navigate('Expenses', { screen: 'AddTransaction' });
+                    (navigation as any).navigate('Expenses', { screen: 'AddTransaction' });
                 }}
                 onLongPress={() => {
                     // Hidden feature: Long press to add Income? 
@@ -324,12 +348,13 @@ const styles = StyleSheet.create({
         marginTop: 5,
     },
     netWorthValue: {
-        fontSize: 48, // Giant Text
+        fontSize: 38,
         fontWeight: 'bold',
         marginTop: 5,
         textShadowColor: 'rgba(0,0,0,0.2)',
         textShadowOffset: { width: 0, height: 4 },
         textShadowRadius: 10,
+        paddingHorizontal: 10,
     },
     netWorthRow: {
         flexDirection: 'row',
@@ -338,7 +363,29 @@ const styles = StyleSheet.create({
     },
     chartContainer: {
         alignItems: 'center',
-        marginBottom: 30,
+        marginBottom: 20,
+    },
+    legendContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+        marginTop: 10,
+        paddingHorizontal: 10,
+    },
+    legendItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginRight: 16,
+        marginBottom: 6,
+    },
+    legendDot: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        marginRight: 6,
+    },
+    legendText: {
+        fontSize: 12,
     },
     summaryRow: {
         flexDirection: 'row',
@@ -379,7 +426,7 @@ const styles = StyleSheet.create({
         marginTop: 8,
     },
     gridValue: {
-        fontSize: 20,
+        fontSize: 16,
         fontWeight: 'bold',
         marginTop: 4,
     },
@@ -420,7 +467,7 @@ const styles = StyleSheet.create({
     },
     fab: {
         position: 'absolute',
-        bottom: 110,
+        bottom: 90,
         right: 20,
         width: 60,
         height: 60,

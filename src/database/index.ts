@@ -247,6 +247,36 @@ export const initializeDatabase = async () => {
       // Column might already exist, ignore error
     }
 
+    // Create budgets table
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS budgets (
+        id TEXT PRIMARY KEY NOT NULL,
+        category TEXT NOT NULL,
+        amount REAL NOT NULL,
+        period TEXT NOT NULL DEFAULT 'monthly',
+        start_date INTEGER NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL
+      );
+    `);
+
+    // Create recurring_transactions table
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS recurring_transactions (
+        id TEXT PRIMARY KEY NOT NULL,
+        amount REAL NOT NULL,
+        type TEXT NOT NULL,
+        category TEXT,
+        source TEXT,
+        description TEXT,
+        account TEXT DEFAULT 'Cash',
+        frequency TEXT NOT NULL DEFAULT 'monthly',
+        next_date INTEGER NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL
+      );
+    `);
+
   } catch (error) {
     console.error('Error initializing database:', error);
     throw error;

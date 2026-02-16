@@ -22,6 +22,10 @@ import { InvestmentsScreen } from '../screens/investments/InvestmentsScreen';
 import { AddInvestmentScreen } from '../screens/investments/AddInvestmentScreen';
 import { AssetsScreen } from '../screens/assets/AssetsScreen';
 import { AddAssetScreen } from '../screens/assets/AddAssetScreen';
+import { BudgetScreen } from '../screens/budget/BudgetScreen';
+import { AddBudgetScreen } from '../screens/budget/AddBudgetScreen';
+import { RecurringScreen } from '../screens/recurring/RecurringScreen';
+import { AddRecurringScreen } from '../screens/recurring/AddRecurringScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -107,6 +111,22 @@ export const AppNavigator = () => {
                 <Stack.Screen
                     name="AddAsset"
                     component={AddAssetScreen}
+                />
+                <Stack.Screen
+                    name="Budgets"
+                    component={BudgetScreen}
+                />
+                <Stack.Screen
+                    name="AddBudget"
+                    component={AddBudgetScreen}
+                />
+                <Stack.Screen
+                    name="Recurring"
+                    component={RecurringScreen}
+                />
+                <Stack.Screen
+                    name="AddRecurring"
+                    component={AddRecurringScreen}
                 />
             </Stack.Navigator>
         </NavigationContainer>

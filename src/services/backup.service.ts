@@ -91,43 +91,62 @@ ${fileContent}
   },
 
   restoreBackup: async (accessToken: string, fileId: string) => {
+    const TEMP_PATH = `${FileSystem.cacheDirectory}restore_temp.db`;
+    const BACKUP_PATH = DB_PATH + '.bak';
+
     try {
-      // 1. Download file content
-      const response = await fetch(
+      // 1. Download to TEMP location (never directly to live DB)
+      const downloadRes = await FileSystem.downloadAsync(
         `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+        TEMP_PATH,
         {
           headers: {
             Authorization: `Bearer ${accessToken}`,
-          },
+          }
         }
       );
 
-      if (!response.ok) throw new Error('Download failed');
-
-      // Note: In React Native with Expo, handling binary data from fetch directly to file can be tricky with large files.
-      // Ideally use FileSystem.downloadAsync, but that requires a URL.
-      // Since the URL requires headers, we can try to write the text/blob if it's small, 
-      // or usage downloadAsync with headers info if supported (Expo FileSystem supports headers).
-      
-      // Let's use FileSystem.downloadAsync with headers
-      const downloadRes = await FileSystem.downloadAsync(
-        `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
-        DB_PATH, // Overwrite directly? Dangerous. Better download to temp first.
-        {
-            headers: {
-                Authorization: `Bearer ${accessToken}`,
-            }
-        }
-      );
-      
-      if (downloadRes.status === 200) {
-          // Verify downloaded file integrity if possible?
-          // If good, move to DB location (It's already there if we targeted DB_PATH, but safer to target temp)
-          return true;
+      if (downloadRes.status !== 200) {
+        throw new Error(`Download failed with status ${downloadRes.status}`);
       }
-      throw new Error('Download status not 200');
 
+      // 2. Validate downloaded file exists and has content
+      const tempInfo = await FileSystem.getInfoAsync(TEMP_PATH);
+      if (!tempInfo.exists || (tempInfo as any).size === 0) {
+        throw new Error('Downloaded file is empty or missing');
+      }
+
+      // 3. Backup current DB before replacing
+      const currentDbInfo = await FileSystem.getInfoAsync(DB_PATH);
+      if (currentDbInfo.exists) {
+        await FileSystem.copyAsync({ from: DB_PATH, to: BACKUP_PATH });
+      }
+
+      // 4. Move temp file to DB location (atomic on most filesystems)
+      try {
+        await FileSystem.moveAsync({ from: TEMP_PATH, to: DB_PATH });
+      } catch (moveError) {
+        // If move fails, restore from backup
+        const backupExists = await FileSystem.getInfoAsync(BACKUP_PATH);
+        if (backupExists.exists) {
+          await FileSystem.moveAsync({ from: BACKUP_PATH, to: DB_PATH });
+        }
+        throw new Error('Failed to swap database file. Original DB restored.');
+      }
+
+      // 5. Clean up backup file on success
+      const backupExists = await FileSystem.getInfoAsync(BACKUP_PATH);
+      if (backupExists.exists) {
+        await FileSystem.deleteAsync(BACKUP_PATH, { idempotent: true });
+      }
+
+      return true;
     } catch (error) {
+      // Clean up temp file on failure
+      const tempExists = await FileSystem.getInfoAsync(TEMP_PATH);
+      if (tempExists.exists) {
+        await FileSystem.deleteAsync(TEMP_PATH, { idempotent: true });
+      }
       console.error('Restore failed:', error);
       throw error;
     }

@@ -5,11 +5,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const SALT_KEY = 'encryption_salt';
 const VERIFICATION_TOKEN_KEY = 'verification_token';
 const ITERATIONS = 10000;
+const IV_LENGTH = 16; // 16 bytes for initialization vector
 
 /**
- * Encryption Service (Simplified)
- * Handles encryption/decryption using expo-crypto
- * Note: Full AES implementation requires native modules
+ * Encryption Service
+ * Uses XOR-based stream cipher with PBKDF2-like key derivation (SHA-256 × 10,000 iterations)
+ * IV is prepended to each encrypted payload for uniqueness
  */
 class EncryptionService {
   private derivedKey: string | null = null;
@@ -33,11 +34,15 @@ class EncryptionService {
    * Initialize encryption with a master password
    */
   async initialize(masterPassword: string): Promise<void> {
+    if (!masterPassword || masterPassword.length < 4) {
+      throw new Error('Password must be at least 4 characters');
+    }
+
     try {
       // Generate a random salt
       const salt = await this.generateSalt();
       
-      // Derive key from password (simplified version)
+      // Derive key from password using iterative hashing
       const key = await this.deriveKey(masterPassword, salt);
       
       // Create a verification token
@@ -123,8 +128,8 @@ class EncryptionService {
   }
 
   /**
-   * Encrypt data (simplified - using base64 encoding for now)
-   * TODO: Implement proper AES encryption when react-native-aes-crypto is added
+   * Encrypt data using XOR stream cipher with random IV
+   * Format: base64(IV + XOR(data, keystream))
    */
   async encrypt(data: string): Promise<string> {
     if (!this.isInitialized || !this.derivedKey) {
@@ -132,9 +137,26 @@ class EncryptionService {
     }
 
     try {
-      // For now, just base64 encode (will add proper encryption later)
-      const encoded = Buffer.from(data).toString('base64');
-      return encoded;
+      // Generate random IV
+      const ivBytes = await Crypto.getRandomBytesAsync(IV_LENGTH);
+      const iv = this.bytesToHex(ivBytes);
+
+      // Generate keystream from key + IV
+      const keystream = await this.generateKeystream(this.derivedKey, iv, data.length);
+      
+      // XOR data with keystream
+      const dataBytes = this.stringToBytes(data);
+      const encryptedBytes = new Uint8Array(dataBytes.length);
+      for (let i = 0; i < dataBytes.length; i++) {
+        encryptedBytes[i] = dataBytes[i] ^ keystream[i % keystream.length];
+      }
+
+      // Prepend IV (hex) + ':' + encrypted data (hex)
+      const encryptedHex = this.bytesToHex(encryptedBytes);
+      const payload = iv + ':' + encryptedHex;
+
+      // Base64 encode the whole payload
+      return btoa(payload);
     } catch (error) {
       console.error('Error encrypting data:', error);
       throw new Error('Failed to encrypt data');
@@ -142,7 +164,7 @@ class EncryptionService {
   }
 
   /**
-   * Decrypt data (simplified)
+   * Decrypt data encrypted by encrypt()
    */
   async decrypt(encryptedData: string): Promise<string> {
     if (!this.isInitialized || !this.derivedKey) {
@@ -150,9 +172,29 @@ class EncryptionService {
     }
 
     try {
-      // For now, just base64 decode
-      const decoded = Buffer.from(encryptedData, 'base64').toString('utf-8');
-      return decoded;
+      // Decode base64
+      const payload = atob(encryptedData);
+      const colonIndex = payload.indexOf(':');
+      if (colonIndex === -1) {
+        throw new Error('Invalid encrypted data format');
+      }
+
+      const iv = payload.substring(0, colonIndex);
+      const encryptedHex = payload.substring(colonIndex + 1);
+
+      // Convert hex back to bytes
+      const encryptedBytes = this.hexToBytes(encryptedHex);
+
+      // Regenerate same keystream
+      const keystream = await this.generateKeystream(this.derivedKey, iv, encryptedBytes.length);
+
+      // XOR to decrypt
+      const decryptedBytes = new Uint8Array(encryptedBytes.length);
+      for (let i = 0; i < encryptedBytes.length; i++) {
+        decryptedBytes[i] = encryptedBytes[i] ^ keystream[i % keystream.length];
+      }
+
+      return this.bytesToString(decryptedBytes);
     } catch (error) {
       console.error('Error decrypting data:', error);
       throw new Error('Failed to decrypt data');
@@ -187,15 +229,68 @@ class EncryptionService {
       .join('');
   }
 
+  private hexToBytes(hex: string): Uint8Array {
+    const bytes = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < hex.length; i += 2) {
+      bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+    }
+    return bytes;
+  }
+
+  private stringToBytes(str: string): Uint8Array {
+    const encoder = new TextEncoder();
+    return encoder.encode(str);
+  }
+
+  private bytesToString(bytes: Uint8Array): string {
+    const decoder = new TextDecoder();
+    return decoder.decode(bytes);
+  }
+
+  /**
+   * Generate a keystream by hashing key+IV iteratively
+   * Produces enough bytes to cover the data length
+   */
+  private async generateKeystream(key: string, iv: string, minLength: number): Promise<Uint8Array> {
+    const blocks: Uint8Array[] = [];
+    let totalLength = 0;
+    let counter = 0;
+
+    while (totalLength < minLength) {
+      const blockInput = key + iv + counter.toString();
+      const hash = await Crypto.digestStringAsync(
+        Crypto.CryptoDigestAlgorithm.SHA256,
+        blockInput
+      );
+      const hashBytes = this.hexToBytes(hash);
+      blocks.push(hashBytes);
+      totalLength += hashBytes.length;
+      counter++;
+    }
+
+    // Concatenate all blocks
+    const keystream = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const block of blocks) {
+      keystream.set(block, offset);
+      offset += block.length;
+    }
+    return keystream;
+  }
+
+  /**
+   * PBKDF2-like key derivation: iterates SHA-256 ITERATIONS times
+   */
   private async deriveKey(password: string, salt: string): Promise<string> {
     try {
-      // Simple key derivation (will be replaced with PBKDF2 when proper crypto is added)
-      const combined = password + salt;
-      const digest = await Crypto.digestStringAsync(
-        Crypto.CryptoDigestAlgorithm.SHA256,
-        combined
-      );
-      return digest;
+      let hash = password + salt;
+      for (let i = 0; i < ITERATIONS; i++) {
+        hash = await Crypto.digestStringAsync(
+          Crypto.CryptoDigestAlgorithm.SHA256,
+          hash + salt + i.toString()
+        );
+      }
+      return hash;
     } catch (error) {
       console.error('Error deriving key:', error);
       throw new Error('Failed to derive encryption key');
@@ -203,7 +298,6 @@ class EncryptionService {
   }
 
   private async createVerificationToken(key: string): Promise<string> {
-    // Hash the key to create a verification token
     const token = await Crypto.digestStringAsync(
       Crypto.CryptoDigestAlgorithm.SHA256,
       'VERIFICATION_TOKEN_V1' + key

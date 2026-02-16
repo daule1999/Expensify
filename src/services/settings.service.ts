@@ -37,8 +37,17 @@ export interface ProfileSettings {
 }
 
 export interface AccountSettings {
-  accounts: string[]; // List of bank account names
+  accounts: string[]; // List of account names (e.g., 'Cash', 'HDFC Savings')
   defaultAccount: string; // Default account for new transactions
+  bankAccounts: BankAccount[]; // Structured bank accounts with last 4 digits
+  customBankIdentifiers: string[]; // User-added SMS sender identifiers
+}
+
+export interface BankAccount {
+  id: string;
+  name: string; // e.g., 'HDFC Savings'
+  bankName: string; // e.g., 'HDFC'
+  last4: string; // Last 4 digits of account number
 }
 
 const DEFAULT_EXPENSE_SETTINGS: ExpenseSettings = {
@@ -70,7 +79,9 @@ const DEFAULT_PROFILE_SETTINGS: ProfileSettings = {
 
 const DEFAULT_ACCOUNT_SETTINGS: AccountSettings = {
   accounts: ['Cash'], // Cash is always available
-  defaultAccount: 'Cash'
+  defaultAccount: 'Cash',
+  bankAccounts: [],
+  customBankIdentifiers: [],
 };
 
 const EXPENSE_SETTINGS_KEY = '@expense_settings';
@@ -230,5 +241,27 @@ export const settingsService = {
       console.error('Error saving account settings:', error);
       throw error;
     }
+  },
+
+  // Bank Identifier Helpers
+  getCustomBankIdentifiers: async (): Promise<string[]> => {
+    const settings = await settingsService.getAccountSettings();
+    return settings.customBankIdentifiers || [];
+  },
+
+  getBankAccounts: async (): Promise<BankAccount[]> => {
+    const settings = await settingsService.getAccountSettings();
+    return settings.bankAccounts || [];
+  },
+
+  /**
+   * Match an extracted last-4 account number to a stored bank account name
+   */
+  matchAccountByLast4: async (last4: string): Promise<string | null> => {
+    if (!last4 || last4.length < 3) return null;
+    const settings = await settingsService.getAccountSettings();
+    const cleaned = last4.replace(/[xX]/g, '');
+    const match = (settings.bankAccounts || []).find(ba => ba.last4 === cleaned);
+    return match ? match.name : null;
   },
 };

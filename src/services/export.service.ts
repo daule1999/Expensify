@@ -13,15 +13,23 @@ export const exportService = {
       const headers = ['Date', 'Type', 'Amount', 'Category/Source', 'Description', 'Account'];
       const csvRows = [headers.join(',')];
 
+      // Helper to safely escape CSV fields
+      const escapeCSV = (value: string | number): string => {
+        const str = String(value);
+        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+          return `"${str.replace(/"/g, '""')}"`;
+        }
+        return str;
+      };
+
       // Add Data Rows
       transactions.forEach(t => {
         const date = new Date(t.date).toLocaleDateString();
         const type = t.type;
         const amount = t.amount;
-        const category = t.category || t.source || '';
-        // Escape quotes and wrap in quotes for CSV safety
-        const description = `"${(t.description || '').replace(/"/g, '""')}"`;
-        const account = t.account || 'Cash';
+        const category = escapeCSV(t.category || t.source || '');
+        const description = escapeCSV(t.description || '');
+        const account = escapeCSV(t.account || 'Cash');
 
         csvRows.push([date, type, amount, category, description, account].join(','));
       });

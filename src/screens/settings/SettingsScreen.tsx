@@ -147,10 +147,21 @@ export const SettingsScreen = () => {
         try {
             const result = await importService.pickDocument();
             if (result.canceled) return;
-            const transactions = await importService.readJSONFile(result.assets[0].uri);
-            await transactionService.importTransactions(transactions);
-            Alert.alert('Success', 'Imported successfully');
-        } catch (e) { Alert.alert('Error', 'Import failed'); }
+            const uri = result.assets[0].uri;
+            const name = result.assets[0].name || '';
+
+            let transactions;
+            if (name.toLowerCase().endsWith('.csv')) {
+                transactions = await importService.readCSVFile(uri);
+            } else {
+                transactions = await importService.readJSONFile(uri);
+            }
+
+            const count = await transactionService.importTransactions(transactions);
+            Alert.alert('Success', `Imported ${count} transactions successfully`);
+        } catch (e: any) {
+            Alert.alert('Error', e.message || 'Import failed');
+        }
     };
 
     const saveClientIds = async () => {
@@ -286,6 +297,10 @@ export const SettingsScreen = () => {
                         <GlassCard style={styles.card}>
                             {renderMenuItem('moon-outline', 'Appearance', isDark ? 'Dark Mode' : 'Light Mode', toggleTheme)}
                             <View style={styles.divider} />
+                            {renderMenuItem('wallet-outline', 'Accounts', 'Bank accounts, UPI, Cash', () => navigation.navigate('AccountSettings' as never))}
+                            <View style={styles.divider} />
+                            {renderMenuItem('pie-chart-outline', 'Budgets', 'Set spending limits', () => navigation.navigate('Budgets' as never))}
+                            <View style={styles.divider} />
                             {renderMenuItem('shield-checkmark-outline', 'Privacy & Security', 'Biometrics, App Lock', () => setActiveSection('privacy'))}
                         </GlassCard>
 
@@ -295,7 +310,7 @@ export const SettingsScreen = () => {
                             <View style={styles.divider} />
                             {renderMenuItem('download-outline', 'Export Data', 'CSV / JSON', handleExport)}
                             <View style={styles.divider} />
-                            {renderMenuItem('exit-outline', 'Import Data', 'Restore from JSON', handleImport)}
+                            {renderMenuItem('exit-outline', 'Import Data', 'CSV / JSON', handleImport)}
                         </GlassCard>
 
                         <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Automation</Text>
@@ -309,6 +324,8 @@ export const SettingsScreen = () => {
                                 } catch (e) { Alert.alert('Error', 'Sync failed'); }
                                 finally { setIsSyncing(false); }
                             })}
+                            <View style={styles.divider} />
+                            {renderMenuItem('repeat-outline', 'Recurring', 'Auto-create transactions', () => navigation.navigate('Recurring' as never))}
                         </GlassCard>
 
                         <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Other</Text>
@@ -377,7 +394,7 @@ export const SettingsScreen = () => {
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
-    content: { padding: 16, paddingTop: 110, paddingBottom: 40 },
+    content: { padding: 16, paddingTop: 110, paddingBottom: 140 },
     sectionTitle: { fontSize: 14, fontWeight: 'bold', marginTop: 24, marginBottom: 8, opacity: 0.7, textTransform: 'uppercase' },
     card: { padding: 16, borderRadius: 16 },
     avatarPlaceholder: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center' },

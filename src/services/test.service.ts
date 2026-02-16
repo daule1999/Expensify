@@ -1,5 +1,4 @@
 import { transactionService } from './transaction.service';
-import { database } from '../database/index'; // Adjusted import based on codebase structure
 
 interface TestResult {
     name: string;
@@ -19,11 +18,10 @@ export const testService = {
             const testId = await transactionService.addTransaction({
                 amount: 123.45,
                 category: 'Test',
-                date: new Date().toISOString(),
+                date: Date.now(),
                 description: 'Self-Test Transaction',
                 type: 'expense',
-                account: 'TestAccount',
-                custom_data: JSON.stringify({ isTest: true })
+                account: 'TestAccount'
             });
 
             // Verify write
