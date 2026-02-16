@@ -22,11 +22,14 @@ export interface IncomeSettings {
   defaultSources: string[];
   customFields: CustomField[];
 }
+
 export interface PrivacySettings {
   hideAmounts: boolean;
   requirePasswordToUnhide: boolean;
   useBiometric: boolean; // Use fingerprint/face ID instead of password
   requireLockOnStartup: boolean; // Force unlock screen on app boot
+  alwaysHideOnStartup: boolean; // Amounts always hidden when app opens
+  autoLockDelay: number; // Idle time in ms before locking (e.g. 120000 for 2 mins)
 }
 
 export interface NotificationSettings {
@@ -76,7 +79,9 @@ const DEFAULT_PRIVACY_SETTINGS: PrivacySettings = {
   hideAmounts: false,
   requirePasswordToUnhide: false,
   useBiometric: false,
-  requireLockOnStartup: false
+  requireLockOnStartup: false,
+  alwaysHideOnStartup: true, // Default to true as per user request for "hidden by default"
+  autoLockDelay: 120000, // 2 minutes
 };
 
 const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {

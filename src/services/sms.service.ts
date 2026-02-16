@@ -156,6 +156,22 @@ export const smsService = {
           
           if (!parsed) continue; // Skip non-transaction SMS
 
+          // 1.5. Self-Transfer Detection
+          // If SMS has transfer keywords (NEFT/IMPS/RTGS/self) AND both
+          // source and destination accounts belong to the user, skip it.
+          if (parsed.isSelfTransfer && parsed.destinationAccount) {
+              const userAccounts = accountSettings.bankAccounts || [];
+              const userLast4s = userAccounts.map((a: any) => a.last4);
+              const sourceClean = parsed.account.replace(/[xX]/g, '');
+              const destClean = parsed.destinationAccount.replace(/[xX]/g, '');
+              const sourceIsOwn = userLast4s.some((l4: string) => sourceClean.endsWith(l4) || l4.endsWith(sourceClean));
+              const destIsOwn = userLast4s.some((l4: string) => destClean.endsWith(l4) || l4.endsWith(destClean));
+              if (sourceIsOwn && destIsOwn) {
+                  console.log(`[SMS] Skipped self-transfer: ₹${parsed.amount} (${parsed.account} → ${parsed.destinationAccount})`);
+                  continue; // Don't count as income or expense
+              }
+          }
+
           // 2. Generate Hash for De-duplication
           // Hash = MD5(merchant + amount + date_rounded_to_minute)
           const dateMinute = Math.floor(parsed.date / 60000); 

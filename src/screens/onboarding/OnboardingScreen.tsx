@@ -65,13 +65,13 @@ export const OnboardingScreen = () => {
             slidesRef.current?.scrollToIndex({ index: currentIndex + 1 });
         } else {
             await AsyncStorage.setItem('has_onboarded', 'true');
-            navigation.navigate('Main' as never);
+            navigation.navigate('MainTabs' as never);
         }
     };
 
     const handleSkip = async () => {
         await AsyncStorage.setItem('has_onboarded', 'true');
-        navigation.navigate('Main' as never);
+        navigation.navigate('MainTabs' as never);
     };
 
     const renderItem = ({ item }: { item: Slide }) => {

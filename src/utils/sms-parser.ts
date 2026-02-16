@@ -6,6 +6,8 @@ export interface ParsedTransaction {
   accountName?: string; // Matched bank account name from settings
   date: number;
   originalSms: string;
+  destinationAccount?: string; // For transfers: the receiving account's last 4 digits
+  isSelfTransfer: boolean; // True if SMS contains transfer keywords (NEFT/IMPS/self-trf)
 }
 
 export interface BankAccountMapping {
@@ -16,18 +18,18 @@ export interface BankAccountMapping {
 const PATTERNS = {
   // Comprehensive patterns for Indian banks (HDFC, SBI, ICICI, Axis, Kotak, etc.)
   debit: [
-    /(?:rs\.?|inr)\s*([\d,]+\.?\d*)\s*(?:debited|spent|paid|withdrawn|deducted)/i,
-    /(?:debited|spent|paid|withdrawn|deducted)\s*(?:rs\.?|inr)?\s*([\d,]+\.?\d*)/i,
-    /(?:payment|purchase)\s*(?:of)?\s*(?:rs\.?|inr)\s*([\d,]+\.?\d*)/i,
-    /(?:emi)\s*(?:of)?\s*(?:rs\.?|inr)?\s*([\d,]+\.?\d*)\s*(?:debited|deducted|paid)/i,
-    /(?:atm)\s*(?:withdrawal|withdrawn)?\s*(?:rs\.?|inr)?\s*([\d,]+\.?\d*)/i,
-    /(?:rs\.?|inr)\s*([\d,]+\.?\d*)\s*(?:was|has been)\s*(?:debited|deducted)/i,
+    /(?:rs\.?|inr|usd|\$)\s*([\d,]+\.?\d*)\s*(?:debited|spent|paid|withdrawn|deducted)/i,
+    /(?:debited|spent|paid|withdrawn|deducted)\s*(?:by|of)?\s*(?:rs\.?|inr|usd|\$)?\s*([\d,]+\.?\d*)/i,
+    /(?:payment|purchase)\s*(?:of)?\s*(?:rs\.?|inr|usd|\$)\s*([\d,]+\.?\d*)/i,
+    /(?:emi)\s*(?:of)?\s*(?:rs\.?|inr|usd|\$)?\s*([\d,]+\.?\d*)\s*(?:debited|deducted|paid)/i,
+    /(?:atm)\s*(?:withdrawal|withdrawn)?\s*(?:of)?\s*(?:rs\.?|inr|usd|\$)?\s*([\d,]+\.?\d*)/i,
+    /(?:rs\.?|inr|usd|\$)\s*([\d,]+\.?\d*)\s*(?:was|has been)\s*(?:debited|deducted)/i,
   ],
   credit: [
-    /(?:rs\.?|inr)\s*([\d,]+\.?\d*)\s*(?:credited|received|deposited|added|refunded)/i,
-    /(?:credited|received|deposited|added|refunded)\s*(?:rs\.?|inr)?\s*([\d,]+\.?\d*)/i,
-    /(?:cashback|refund)\s*(?:of)?\s*(?:rs\.?|inr)?\s*([\d,]+\.?\d*)/i,
-    /(?:rs\.?|inr)\s*([\d,]+\.?\d*)\s*(?:was|has been)\s*(?:credited|deposited)/i,
+    /(?:rs\.?|inr|usd|\$)\s*([\d,]+\.?\d*)\s*(?:credited|received|deposited|added|refunded|reversed)/i,
+    /(?:credited|received|deposited|added|refunded|reversed)\s*(?:by|to|of)?\s*(?:rs\.?|inr|usd|\$)?\s*([\d,]+\.?\d*)/i,
+    /(?:cashback|refund|reversal)\s*(?:of)?\s*(?:rs\.?|inr|usd|\$)?\s*([\d,]+\.?\d*)/i,
+    /(?:rs\.?|inr|usd|\$)\s*([\d,]+\.?\d*)\s*(?:was|has been)\s*(?:credited|deposited|reversed)/i,
   ],
   account: [
     /(?:a\/c|ac|account)\s*(?:no\.?)?\s*([xX]*\d{3,4})/i,
@@ -36,9 +38,22 @@ const PATTERNS = {
     /(?:xx|XX)(\d{3,4})/,
   ],
   merchant: [
-    /(?:at|to|via|@)\s+([a-zA-Z0-9\s\.]+?)(?:\s+(?:on|for|using|ref|txn|via)|[.\s]*$)/i,
-    /(?:info:\s*)([a-zA-Z0-9\s\.]+?)(?:\s+(?:on|ref)|[.\s]*$)/i,
+    /(?:at|to|via|@)\s+([a-zA-Z0-9\s\.@]+?)(?:\s+(?:on|for|using|ref|txn|via)|[.\s]*$)/i,
+    /(?:info:\s*)([a-zA-Z0-9\s\.@]+?)(?:\s+(?:on|ref)|[.\s]*$)/i,
     /(?:trf\s+to|paid to|sent to)\s+([a-zA-Z0-9\s\.@]+?)(?:\s+(?:on|ref|via)|[.\s]*$)/i,
+  ],
+  // Patterns to detect inter-account transfers
+  transfer: [
+    /(?:neft|imps|rtgs|upi)\s*(?:transfer|trf)?/i,
+    /(?:transferred|transfer)\s*(?:to|from)\s*(?:a\/c|ac|account|self)/i,
+    /(?:fund\s*transfer|self\s*transfer)/i,
+    /(?:your own|own account|between accounts)/i,
+  ],
+  // Extract the destination account from transfer SMS
+  destinationAccount: [
+    /(?:to|towards)\s*(?:a\/c|ac|account)\s*(?:no\.?)?\s*([xX]*\d{3,4})/i,
+    /(?:beneficiary|credit)\s*(?:a\/c|ac|account)?\s*(?:no\.?)?\s*([xX]*\d{3,4})/i,
+    /(?:to)\s*(?:xx|XX)(\d{3,4})/i,
   ]
 };
 
@@ -120,6 +135,27 @@ export const smsParser = {
       merchant = merchant.substring(0, 50) + '...';
     }
 
+    // 5. Detect Self-Transfer keywords
+    let isSelfTransfer = false;
+    for (const pattern of PATTERNS.transfer) {
+      if (pattern.test(body)) {
+        isSelfTransfer = true;
+        break;
+      }
+    }
+
+    // 6. Extract Destination Account (for transfer SMS)
+    let destinationAccount: string | undefined;
+    if (isSelfTransfer) {
+      for (const pattern of PATTERNS.destinationAccount) {
+        const match = body.match(pattern);
+        if (match && match[1]) {
+          destinationAccount = match[1];
+          break;
+        }
+      }
+    }
+
     return {
       amount,
       type,
@@ -127,7 +163,9 @@ export const smsParser = {
       account,
       accountName: smsParser.matchAccountName(account, bankAccountMappings),
       date: timestamp,
-      originalSms: body
+      originalSms: body,
+      isSelfTransfer,
+      destinationAccount
     };
   },
 

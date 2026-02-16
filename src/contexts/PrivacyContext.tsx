@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Alert, Modal, View, Text, TouchableOpacity, StyleSheet, TextInput } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Alert, Modal, View, Text, TouchableOpacity, StyleSheet, TextInput, AppState, AppStateStatus } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { settingsService, PrivacySettings } from '../services/settings.service';
 import { encryptionService } from '../services/encryption.service';
@@ -19,14 +20,49 @@ export const PrivacyProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const [showPasswordModal, setShowPasswordModal] = useState(false);
     const [passwordInput, setPasswordInput] = useState('');
 
+    // Initial load on mount
     useEffect(() => {
-        loadSettings();
+        loadSettings(true); // pass true for startup
     }, []);
 
-    const loadSettings = async () => {
+    // AppState listener
+    useEffect(() => {
+        const subscription = AppState.addEventListener('change', handleAppStateChange);
+        return () => {
+            subscription.remove();
+        };
+    }, [privacySettings]);
+
+    const handleAppStateChange = async (nextAppState: AppStateStatus) => {
+        if (nextAppState === 'background' || nextAppState === 'inactive') {
+            // Store the background timestamp
+            await AsyncStorage.setItem('@last_active_time', Date.now().toString());
+        } else if (nextAppState === 'active') {
+            // Check if we should lock based on idle time
+            const lastActive = await AsyncStorage.getItem('@last_active_time');
+            if (lastActive && privacySettings?.autoLockDelay) {
+                const elapsed = Date.now() - parseInt(lastActive, 10);
+                if (elapsed >= privacySettings.autoLockDelay) {
+                    // Lock the app - we need to communicate this to AppNavigator
+                    // For now, let's just trigger hideAmounts and maybe we need a dedicated 'lock' state
+                    setIsAmountHidden(true);
+                    // In a real app, you might navigate to Unlock screen here
+                }
+            }
+        }
+    };
+
+    const loadSettings = async (isStartup = false) => {
         const settings = await settingsService.getPrivacySettings();
         setPrivacySettings(settings);
-        setIsAmountHidden(settings.hideAmounts);
+
+        // Only enforce startup-privacy on cold start
+        if (isStartup && settings.alwaysHideOnStartup) {
+            setIsAmountHidden(true);
+        } else if (!isStartup) {
+            // Otherwise follow the stored setting
+            setIsAmountHidden(settings.hideAmounts);
+        }
     };
 
     const refreshSettings = async () => {
