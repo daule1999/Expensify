@@ -1,6 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { Subscription } from './subscription.service';
+import { Debt } from './debt.service';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -52,15 +53,55 @@ export const notificationService = {
           body: `Your ${subscription.name} subscription of ${subscription.amount} is due on ${billingDate.toLocaleDateString()}.`,
           data: { subscriptionId: subscription.id },
         },
-        trigger: {
-            type: Notifications.SchedulableTriggerInputTypes.DATE,
-            timestamp: triggerDate.getTime(),
-        },
+        trigger: { date: triggerDate } as any,
       });
       return id;
     } catch (error) {
       console.error('Failed to schedule notification:', error);
       return null;
+    }
+  },
+
+  scheduleEmiNotification: async (debt: Debt): Promise<string | null> => {
+    if (!debt.due_date) return null;
+
+    const dueDate = new Date(debt.due_date);
+    // Schedule 2 days before
+    const triggerDate = new Date(dueDate);
+    triggerDate.setDate(triggerDate.getDate() - 2);
+
+    if (triggerDate.getTime() < Date.now()) {
+        return null; 
+    }
+
+    try {
+      const id = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: 'EMI Payment Due',
+          body: `Your EMI for "${debt.name}" of ₹${debt.emi_amount || debt.remaining_amount} is due on ${dueDate.toLocaleDateString()}.`,
+          data: { debtId: debt.id },
+        },
+        trigger: { date: triggerDate } as any,
+      });
+      return id;
+    } catch (error) {
+      console.error('Failed to schedule EMI notification:', error);
+      return null;
+    }
+  },
+
+  showBudgetAlert: async (category: string, amount: number, limit: number) => {
+    try {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: '⚠️ Budget Alert',
+          body: `You've spent ₹${amount} on ${category}, which exceeds your limit of ₹${limit}!`,
+          data: { category },
+        },
+        trigger: null, // Show immediately
+      });
+    } catch (error) {
+      console.error('Failed to show budget alert:', error);
     }
   },
 

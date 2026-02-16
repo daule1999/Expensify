@@ -126,6 +126,7 @@ export const initializeDatabase = async () => {
         due_date INTEGER,
         creditor TEXT,
         notes TEXT,
+        emi_notification_id TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       );
@@ -209,6 +210,13 @@ export const initializeDatabase = async () => {
     `);
 
     console.log('Database initialized successfully');
+
+    // Migration: Add emi_notification_id column to debts table
+    try {
+      await db.execAsync(`ALTER TABLE debts ADD COLUMN emi_notification_id TEXT;`);
+    } catch (error) {
+      // Column might already exist, ignore error
+    }
     
     // Insert default categories if none exist
     const result = await db.getFirstAsync('SELECT COUNT(*) as count FROM categories') as { count: number } | null;

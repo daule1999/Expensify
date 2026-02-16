@@ -1,5 +1,6 @@
 import { db } from '../database';
 import * as Crypto from 'expo-crypto';
+import { notificationService } from './notification.service';
 
 export interface Debt {
   id: string;
@@ -12,6 +13,7 @@ export interface Debt {
   due_date?: number;
   creditor?: string;
   notes?: string;
+  emi_notification_id?: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -65,16 +67,23 @@ export const debtService = {
   addDebt: async (data: Omit<Debt, 'id' | 'created_at' | 'updated_at'>): Promise<string> => {
     const id = Crypto.randomUUID();
     const now = Date.now();
+    
+    // Schedule Notification
+    let notificationId = null;
+    if (data.due_date) {
+        notificationId = await notificationService.scheduleEmiNotification({ ...data, id } as Debt);
+    }
+
     try {
       await db.runAsync(
         `INSERT INTO debts (
           id, name, principal_amount, remaining_amount, interest_rate, emi_amount,
-          start_date, due_date, creditor, notes, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          start_date, due_date, creditor, notes, emi_notification_id, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           id, data.name, data.principal_amount, data.remaining_amount, 
           data.interest_rate || 0, data.emi_amount || 0, data.start_date, data.due_date || null, 
-          data.creditor || '', data.notes || '', now, now
+          data.creditor || '', data.notes || '', notificationId, now, now
         ]
       );
       return id;
@@ -87,6 +96,24 @@ export const debtService = {
   updateDebt: async (id: string, updates: Partial<Debt>): Promise<void> => {
     const now = Date.now();
     try {
+      // Fetch existing for notification logic
+      const existing = await db.getFirstAsync<Debt>('SELECT * FROM debts WHERE id = ?', [id]);
+      
+      if (existing) {
+          if (updates.due_date || updates.name || updates.emi_amount || updates.remaining_amount) {
+              // Cancel old
+              if (existing.emi_notification_id) {
+                  await notificationService.cancelNotification(existing.emi_notification_id);
+              }
+
+              // Schedule new
+              const merged = { ...existing, ...updates };
+              if (merged.due_date) {
+                  updates.emi_notification_id = await notificationService.scheduleEmiNotification(merged);
+              }
+          }
+      }
+
       const fields = Object.keys(updates).filter(k => k !== 'id' && k !== 'created_at');
       if (fields.length === 0) return;
 
@@ -104,6 +131,10 @@ export const debtService = {
 
   deleteDebt: async (id: string): Promise<void> => {
     try {
+      const existing = await db.getFirstAsync<Debt>('SELECT * FROM debts WHERE id = ?', [id]);
+      if (existing && existing.emi_notification_id) {
+          await notificationService.cancelNotification(existing.emi_notification_id);
+      }
       await db.runAsync('DELETE FROM emis WHERE debt_id = ?', [id]);
       await db.runAsync('DELETE FROM debts WHERE id = ?', [id]);
     } catch (error) {
