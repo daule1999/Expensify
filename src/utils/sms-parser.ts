@@ -18,8 +18,8 @@ export interface BankAccountMapping {
 const PATTERNS = {
   // Comprehensive patterns for Indian banks (HDFC, SBI, ICICI, Axis, Kotak, etc.)
   debit: [
-    /(?:rs\.?|inr|usd|\$)\s*([\d,]+\.?\d*)\s*(?:debited|spent|paid|withdrawn|deducted)/i,
-    /(?:debited|spent|paid|withdrawn|deducted)\s*(?:by|of)?\s*(?:rs\.?|inr|usd|\$)?\s*([\d,]+\.?\d*)/i,
+    /(?:rs\.?|inr|usd|\$)\s*([\d,]+\.?\d*)\s*(?:debited|spent|paid|withdrawn|deducted|sent|transferred)/i,
+    /(?:debited|spent|paid|withdrawn|deducted|sent|transferred)\s*(?:by|of)?\s*(?:rs\.?|inr|usd|\$)?\s*([\d,]+\.?\d*)/i,
     /(?:payment|purchase)\s*(?:of)?\s*(?:rs\.?|inr|usd|\$)\s*([\d,]+\.?\d*)/i,
     /(?:emi)\s*(?:of)?\s*(?:rs\.?|inr|usd|\$)?\s*([\d,]+\.?\d*)\s*(?:debited|deducted|paid)/i,
     /(?:atm)\s*(?:withdrawal|withdrawn)?\s*(?:of)?\s*(?:rs\.?|inr|usd|\$)?\s*([\d,]+\.?\d*)/i,
@@ -35,6 +35,7 @@ const PATTERNS = {
     /(?:a\/c|ac|account)\s*(?:no\.?)?\s*([xX]*\d{3,4})/i,
     /(?:ending|ending with|end)\s*([xX]*\d{3,4})/i,
     /(?:card)\s*(?:no\.?)?\s*(?:ending\s*)?([xX]*\d{4})/i,
+    /(?:from)\s*([xX]*\d{3,4})/i,
     /(?:xx|XX)(\d{3,4})/,
   ],
   merchant: [

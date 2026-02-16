@@ -31,7 +31,8 @@
       "permissions": [
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",
-        "NOTIFICATIONS"
+        "NOTIFICATIONS",
+        "READ_SMS"
       ]
     },
     "web": {
@@ -49,7 +50,8 @@
         }
       ],
       "@react-native-community/datetimepicker",
-      "expo-asset"
+      "expo-asset",
+      "expo-notifications"
     ],
     "extra": {
       "eas": {

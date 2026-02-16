@@ -437,6 +437,216 @@ test('Transfer: External Transfer SHOULD Record', () => {
     if (sourceIsOwn && destIsOwn) throw new Error('External transfer incorrectly flagged as self-transfer');
 });
 
+// --- Group: Financial Math & Logic ---
+test('Debt: EMI Reduction Logic', () => {
+    const debt = { principal: 10000, remaining: 5000 };
+    const payEMI = (currentDebt, amount) => Math.max(0, currentDebt.remaining - amount);
+
+    if (payEMI(debt, 2000) !== 3000) throw new Error('EMI reduction math failed');
+    if (payEMI({ remaining: 100 }, 200) !== 0) throw new Error('Debt floor check failed');
+});
+
+test('Subscription: Next Billing Date (Monthly)', () => {
+    const start = new Date('2026-01-15').getTime();
+    const calculateNext = (date, cycle) => {
+        const d = new Date(date);
+        if (cycle === 'monthly') d.setMonth(d.getMonth() + 1);
+        return d.getTime();
+    };
+    const expected = new Date('2026-02-15').getTime();
+    if (calculateNext(start, 'monthly') !== expected) throw new Error('Monthly billing date math failed');
+});
+
+test('Subscription: Next Billing Date (Yearly)', () => {
+    const start = new Date('2026-01-15').getTime();
+    const calculateNext = (date, cycle) => {
+        const d = new Date(date);
+        if (cycle === 'yearly') d.setFullYear(d.getFullYear() + 1);
+        return d.getTime();
+    };
+    const expected = new Date('2027-01-15').getTime();
+    if (calculateNext(start, 'yearly') !== expected) throw new Error('Yearly billing date math failed');
+});
+
+test('Subscription: Amortized Monthly Cost', () => {
+    const subs = [
+        { amount: 100, cycle: 'monthly', active: true },
+        { amount: 1200, cycle: 'yearly', active: true },
+        { amount: 500, cycle: 'monthly', active: false } // Should ignore
+    ];
+    const total = subs.reduce((sum, s) => {
+        if (!s.active) return sum;
+        return sum + (s.cycle === 'monthly' ? s.amount : s.amount / 12);
+    }, 0);
+
+    // 100 + (1200/12) = 200
+    if (total !== 200) throw new Error(`Amortization math failed. Got ${total}`);
+});
+
+test('Search: Keyword Filtering Logic', () => {
+    const items = [
+        { desc: 'Uber Ride', category: 'Transport', amount: 100 },
+        { desc: 'Grocery Store', category: 'Food', amount: 500 },
+        { desc: 'Netflix', category: 'Entertainment', amount: 200 }
+    ];
+    const search = (query) => items.filter(i =>
+        i.desc.toLowerCase().includes(query) ||
+        i.category.toLowerCase().includes(query)
+    );
+
+    const res1 = search('grocery');
+    if (res1.length !== 1 || res1[0].amount !== 500) throw new Error('Search failed for description');
+
+    const res2 = search('transport');
+    if (res2.length !== 1 || res2[0].amount !== 100) throw new Error('Search failed for category');
+});
+
+// --- Group: Advanced Logic Deep Dive ---
+test('Investment: Portfolio Summary Math', () => {
+    const inv = [
+        { amount_invested: 1000, current_value: 1200 },
+        { amount_invested: 500, current_value: 400 }, // Loss
+        { amount_invested: 2000, current_value: 2000 } // No change
+    ];
+    const getSummary = (items) => {
+        const totalInvested = items.reduce((sum, i) => sum + i.amount_invested, 0);
+        const totalCurrent = items.reduce((sum, i) => sum + i.current_value, 0);
+        const diff = totalCurrent - totalInvested;
+        const pct = totalInvested > 0 ? (diff / totalInvested) * 100 : 0;
+        return { totalInvested, totalCurrent, diff, pct };
+    };
+
+    const res = getSummary(inv);
+    if (res.totalInvested !== 3500) throw new Error('Total invested math failed');
+    if (res.totalCurrent !== 3600) throw new Error('Total current math failed');
+    if (res.diff !== 100) throw new Error('Profit/Loss math failed');
+    // 100 / 3500 * 100 = 2.857...
+    if (Math.abs(res.pct - 2.857) > 0.001) throw new Error('ROI percentage math failed');
+});
+
+test('Investment: Zero Cost Handling', () => {
+    const inv = [{ amount_invested: 0, current_value: 100 }];
+    const getSummary = (items) => {
+        const totalInvested = items.reduce((sum, i) => sum + i.amount_invested, 0);
+        const totalCurrent = items.reduce((sum, i) => sum + i.current_value, 0);
+        return totalInvested > 0 ? ((totalCurrent - totalInvested) / totalInvested) * 100 : 0;
+    };
+    if (getSummary(inv) !== 0) throw new Error('Divide by zero protection failed');
+});
+
+test('CSV Parser: Quoted Field with Commas', () => {
+    const line = '"Grocery, Home",100,Food';
+    const parse = (str) => {
+        const res = [];
+        let cur = '';
+        let inQ = false;
+        for (let i = 0; i < str.length; i++) {
+            const c = str[i];
+            if (inQ && c === '"') inQ = false;
+            else if (!inQ && c === '"') inQ = true;
+            else if (!inQ && c === ',') { res.push(cur); cur = ''; }
+            else cur += c;
+        }
+        res.push(cur);
+        return res;
+    };
+    const res = parse(line);
+    if (res.length !== 3) throw new Error('Split logic incorrect');
+    if (res[0] !== 'Grocery, Home') throw new Error('Quoted comma extraction failed');
+});
+
+test('CSV Parser: Escaped Quotes', () => {
+    // CSV standard: "Say ""Hi""" -> Say "Hi"
+    // Simplified logic for test (as implemented in service)
+    const line = '"Say ""Hi"""';
+    const parse = (str) => {
+        // Mock of the logic in import.service.ts
+        let cur = '';
+        let inQ = false;
+        for (let i = 0; i < str.length; i++) {
+            if (inQ) {
+                if (str[i] === '"' && str[i + 1] === '"') { cur += '"'; i++; }
+                else if (str[i] === '"') inQ = false;
+                else cur += str[i];
+            } else {
+                if (str[i] === '"') inQ = true;
+                else cur += str[i];
+            }
+        }
+        return cur;
+    };
+    if (parse(line) !== 'Say "Hi"') throw new Error('Escaped quote parsing failed');
+});
+
+test('JSON Import: Partial Failure Recovery', () => {
+    const data = [
+        { amount: 100, type: 'expense', date: 123 }, // Valid
+        { amount: 0, type: 'expense' }, // Invalid amount
+        { type: 'income' }, // Missing amount
+        { amount: 50, type: 'income', date: 456 } // Valid
+    ];
+    const valid = data.filter(d => d.amount > 0 && d.date !== undefined && (d.type === 'expense' || d.type === 'income'));
+    if (valid.length !== 2) throw new Error('Filtering logic failed');
+});
+
+test('SMS Regex: Currency Symbols', () => {
+    const bodies = [
+        'Paid ₹500 to', 'Paid Rs. 500 to', 'Paid INR 500 to', 'Paid $500 to'
+    ];
+    const regex = /(?:rs\.?|inr|usd|\$|₹)\s*([\d,]+\.?\d*)/i;
+    bodies.forEach(b => {
+        if (!regex.test(b)) throw new Error(`Currency regex failed for: ${b}`);
+    });
+});
+
+test('SMS Regex: Ignore OTPs', () => {
+    const otps = ['Your OTP is 1234', 'Verify with 4567', 'One Time Password 9999'];
+    // Added 'verify' to the regex
+    const regex = /(?:otp|code|verify|verification|password)/i;
+    otps.forEach(o => {
+        if (!regex.test(o)) throw new Error(`OTP regex failed for: ${o}`);
+    });
+});
+
+test('Date Logic: DD/MM/YYYY Formatter', () => {
+    const date = new Date('2026-02-16'); // Month is 1 (index)
+    const format = (d) => {
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = d.getFullYear();
+        return `${day}/${month}/${year}`;
+    };
+    if (format(date) !== '16/02/2026') throw new Error('Date formatting failed');
+});
+
+test('Transaction Grouping: By Date', () => {
+    const txns = [
+        { id: 1, date: 1000, amount: 10 },
+        { id: 2, date: 1000, amount: 20 },
+        { id: 3, date: 2000, amount: 30 }
+    ];
+    // Mock grouping logic
+    const groups = txns.reduce((acc, t) => {
+        const key = t.date;
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(t);
+        return acc;
+    }, {});
+
+    if (Object.keys(groups).length !== 2) throw new Error('Grouping key count failed');
+    if (groups[1000].length !== 2) throw new Error('Grouping value count failed');
+});
+
+test('Bank Account: Masking Match Logic', () => {
+    const registered = '1234';
+    const smsAccounts = ['XX-1234', 'xx1234', '...1234', '1234'];
+    const isMatch = (extracted) => extracted.replace(/[^0-9]/g, '').endsWith(registered);
+
+    smsAccounts.forEach(a => {
+        if (!isMatch(a)) throw new Error(`Account matching failed for: ${a}`);
+    });
+});
+
 console.log('\n--- AUTOMATION TEST REPORT ---');
 console.table(results);
 

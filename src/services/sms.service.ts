@@ -14,15 +14,16 @@ export interface SyncProgress {
 }
 
 export const smsService = {
-  checkPermission: async (): Promise<boolean> => {
-    // 0. Force Mock Data if SmsAndroid is not available or we are in Expo Go
-    // If native module is undefined, use mock.
-    if (!SmsAndroid || !SmsAndroid.list) {
-        console.log('[SMS] Native module not found, skipping permission check (Mock Mode).');
-        return true; // Pretend permission is granted for mock mode
-    }
+  isAvailable: (): boolean => {
+    return !!(SmsAndroid && SmsAndroid.list && Platform.OS === 'android');
+  },
 
-    if (Platform.OS !== 'android') return false;
+  checkPermission: async (): Promise<boolean> => {
+    // Check if SMS functionality is available
+    if (!smsService.isAvailable()) {
+        console.warn('[SMS] Native module not found or not on Android. SMS functionality requires a development build on Android.');
+        return false;
+    }
 
     try {
       const granted = await PermissionsAndroid.request(
@@ -43,49 +44,13 @@ export const smsService = {
   },
 
   getAllSms: async (): Promise<any[]> => {
-    // 1. Mock Data for Expo Go or Non-Android
-    if (!SmsAndroid || !SmsAndroid.list) {
-        console.log('[SMS] Using Mock SMS Data (Expo Go / Simulator)');
-        
-        // Simulating delay to show loading state
-        await new Promise(resolve => setTimeout(resolve, 1500)); 
-
-        return [
-            {
-                _id: '1',
-                address: 'HDFCBK',
-                body: 'Rs. 1500.00 debited from a/c 1234 on 12-02-26 to ZOMATO. UPI Ref: 12345678.',
-                date: Date.now() - 100000,
-            },
-            {
-                _id: '2',
-                address: 'SBIUPI',
-                body: 'Dear User, INR 450.00 debited from A/c X6789 via UPI for UBER RIDES.',
-                date: Date.now() - 500000,
-            },
-            {
-                _id: '3',
-                address: 'AMZPAY',
-                body: 'Paid Rs. 2000.00 for electricity bill via Amazon Pay. Txn ID: 998877.',
-                date: Date.now() - 86400000,
-            },
-            {
-                 _id: '4',
-                 address: 'MOM',
-                 body: 'Hello beta, sent you some money.',
-                 date: Date.now() - 1000,
-            },
-            {
-                _id: '5',
-                address: 'HDFC-SALARY',
-                body: 'Rs. 50000.00 credited to a/c 1234 on 30-01-26. Salary for Jan.',
-                date: Date.now() - 2000000,
-            }
-        ];
+    // Check if SMS functionality is available
+    if (!smsService.isAvailable()) {
+        console.warn('[SMS] SMS functionality not available in current environment. Use a development build on Android for SMS features.');
+        return [];
     }
 
     console.log('[SMS] Reading real SMS from inbox...');
-    // 2. Real Native SMS Reading
     return new Promise((resolve, reject) => {
         const filter = {
             box: 'inbox',
