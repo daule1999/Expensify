@@ -126,6 +126,7 @@ export const initializeDatabase = async () => {
         due_date INTEGER,
         creditor TEXT,
         notes TEXT,
+        emi_notification_id TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       );
@@ -209,6 +210,13 @@ export const initializeDatabase = async () => {
     `);
 
     console.log('Database initialized successfully');
+
+    // Migration: Add emi_notification_id column to debts table
+    try {
+      await db.execAsync(`ALTER TABLE debts ADD COLUMN emi_notification_id TEXT;`);
+    } catch (error) {
+      // Column might already exist, ignore error
+    }
     
     // Insert default categories if none exist
     const result = await db.getFirstAsync('SELECT COUNT(*) as count FROM categories') as { count: number } | null;
@@ -246,6 +254,36 @@ export const initializeDatabase = async () => {
     } catch (error) {
       // Column might already exist, ignore error
     }
+
+    // Create budgets table
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS budgets (
+        id TEXT PRIMARY KEY NOT NULL,
+        category TEXT NOT NULL,
+        amount REAL NOT NULL,
+        period TEXT NOT NULL DEFAULT 'monthly',
+        start_date INTEGER NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL
+      );
+    `);
+
+    // Create recurring_transactions table
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS recurring_transactions (
+        id TEXT PRIMARY KEY NOT NULL,
+        amount REAL NOT NULL,
+        type TEXT NOT NULL,
+        category TEXT,
+        source TEXT,
+        description TEXT,
+        account TEXT DEFAULT 'Cash',
+        frequency TEXT NOT NULL DEFAULT 'monthly',
+        next_date INTEGER NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL
+      );
+    `);
 
   } catch (error) {
     console.error('Error initializing database:', error);

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { PieChart, LineChart } from 'react-native-chart-kit';
 
 import { transactionService, Transaction } from '../../services/transaction.service';
 import { AmountDisplay } from '../../components/AmountDisplay';
@@ -16,15 +17,15 @@ const { width } = Dimensions.get('window');
 interface CategoryTotal {
     category: string;
     total: number;
-    count: number;
-    percentage: number;
+    color: string;
+    legendFontColor: string;
+    legendFontSize: number;
 }
 
 interface MonthlyData {
     month: string;
     income: number;
     expenses: number;
-    balance: number;
 }
 
 type PeriodType = 'today' | 'week' | 'month' | 'year';
@@ -39,8 +40,7 @@ export const ReportsScreen = () => {
     const [totalIncome, setTotalIncome] = useState(0);
     const [totalExpenses, setTotalExpenses] = useState(0);
     const [balance, setBalance] = useState(0);
-    const [topExpenseCategories, setTopExpenseCategories] = useState<CategoryTotal[]>([]);
-    const [topIncomeCategories, setTopIncomeCategories] = useState<CategoryTotal[]>([]);
+    const [pieData, setPieData] = useState<CategoryTotal[]>([]);
     const [monthlyTrend, setMonthlyTrend] = useState<MonthlyData[]>([]);
     const [transactionCount, setTransactionCount] = useState({ income: 0, expenses: 0 });
     const [selectedAccount, setSelectedAccount] = useState('All Accounts');
@@ -48,8 +48,20 @@ export const ReportsScreen = () => {
     useFocusEffect(
         React.useCallback(() => {
             loadReportData();
-        }, [period, selectedDate, selectedAccount])
+        }, [period, selectedDate, selectedAccount, theme]) // Re-run when theme changes
     );
+
+    const chartConfig = {
+        backgroundGradientFrom: 'transparent',
+        backgroundGradientTo: 'transparent',
+        backgroundGradientFromOpacity: 0,
+        backgroundGradientToOpacity: 0,
+        color: (opacity = 1) => isDark ? `rgba(255, 255, 255, ${opacity})` : `rgba(0, 0, 0, ${opacity})`,
+        strokeWidth: 2,
+        barPercentage: 0.5,
+        useShadowColorFromDataset: false,
+        labelColor: (opacity = 1) => isDark ? `rgba(255, 255, 255, ${opacity})` : `rgba(0, 0, 0, ${opacity})`,
+    };
 
     const getDateRange = () => {
         const endDate = new Date(selectedDate);
@@ -119,54 +131,54 @@ export const ReportsScreen = () => {
     };
 
     const calculateCategoryTotals = (transactions: Transaction[]) => {
-        const expensesByCategory: { [key: string]: { total: number; count: number } } = {};
-        const incomeByCategory: { [key: string]: { total: number; count: number } } = {};
+        const expensesByCategory: { [key: string]: number } = {};
 
-        transactions.forEach(t => {
+        transactions.filter(t => t.type === 'expense').forEach(t => {
             const category = t.category || 'Uncategorized';
-            if (t.type === 'expense') {
-                if (!expensesByCategory[category]) expensesByCategory[category] = { total: 0, count: 0 };
-                expensesByCategory[category].total += t.amount;
-                expensesByCategory[category].count += 1;
-            } else {
-                if (!incomeByCategory[category]) incomeByCategory[category] = { total: 0, count: 0 };
-                incomeByCategory[category].total += t.amount;
-                incomeByCategory[category].count += 1;
-            }
+            expensesByCategory[category] = (expensesByCategory[category] || 0) + t.amount;
         });
 
-        const totalExpenseAmount = Object.values(expensesByCategory).reduce((sum, cat) => sum + cat.total, 0);
-        const totalIncomeAmount = Object.values(incomeByCategory).reduce((sum, cat) => sum + cat.total, 0);
+        const colors = [
+            '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40',
+            '#E7E9ED', '#71B37C', '#EC932F', '#5D6D7E'
+        ];
 
-        setTopExpenseCategories(Object.entries(expensesByCategory)
-            .map(([category, data]) => ({
-                category,
-                total: data.total,
-                count: data.count,
-                percentage: totalExpenseAmount > 0 ? (data.total / totalExpenseAmount) * 100 : 0
-            }))
-            .sort((a, b) => b.total - a.total)
-            .slice(0, 5));
+        const data: CategoryTotal[] = Object.entries(expensesByCategory)
+            .sort(([, a], [, b]) => b - a)
+            .slice(0, 8)
+            .map(([category, total], index) => ({
+                name: category, // PieChart expects 'name' for legend? No, it uses accessor options, but usually structured with name/population. 
+                // Actually react-native-chart-kit PieChart format:
+                // name: string, population: number, color: string, legendFontColor: string, legendFontSize: number
+                category, // Keeping for key
+                total,
+                population: total, // Using population for the value
+                color: colors[index % colors.length],
+                legendFontColor: theme.colors.textSecondary,
+                legendFontSize: 12
+            }));
 
-        setTopIncomeCategories(Object.entries(incomeByCategory)
-            .map(([category, data]) => ({
-                category,
-                total: data.total,
-                count: data.count,
-                percentage: totalIncomeAmount > 0 ? (data.total / totalIncomeAmount) * 100 : 0
-            }))
-            .sort((a, b) => b.total - a.total)
-            .slice(0, 5));
+        setPieData(data);
     };
 
     const calculateMonthlyTrend = (transactions: Transaction[]) => {
         const monthlyData: { [key: string]: { income: number; expenses: number } } = {};
+
+        // Initialize last 6 months
+        for (let i = 5; i >= 0; i--) {
+            const d = new Date();
+            d.setMonth(d.getMonth() - i);
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            monthlyData[key] = { income: 0, expenses: 0 };
+        }
+
         transactions.forEach(t => {
             const date = new Date(t.date);
             const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-            if (!monthlyData[monthKey]) monthlyData[monthKey] = { income: 0, expenses: 0 };
-            if (t.type === 'income') monthlyData[monthKey].income += t.amount;
-            else monthlyData[monthKey].expenses += t.amount;
+            if (monthlyData[monthKey]) {
+                if (t.type === 'income') monthlyData[monthKey].income += t.amount;
+                else monthlyData[monthKey].expenses += t.amount;
+            }
         });
 
         setMonthlyTrend(Object.entries(monthlyData)
@@ -174,15 +186,9 @@ export const ReportsScreen = () => {
                 month: new Date(month + '-01').toLocaleDateString('default', { month: 'short' }),
                 income: data.income,
                 expenses: data.expenses,
-                balance: data.income - data.expenses
             }))
-            .sort((a, b) => a.month.localeCompare(b.month))
-            .slice(-6));
-    };
-
-    const getBarColor = (index: number) => {
-        const colors = [theme.colors.primary, theme.colors.secondary, theme.colors.success, theme.colors.warning, theme.colors.info, theme.colors.error];
-        return colors[index % colors.length];
+            .sort((a, b) => new Date(a.month).getTime() - new Date(b.month).getTime()) // Roughly sort by month name if locale matches, but object entries order usually preserved for recent insertion order. Better to trust the init loop order.
+        );
     };
 
     const getPeriodLabel = () => {
@@ -292,88 +298,54 @@ export const ReportsScreen = () => {
                     </GlassCard>
                 </View>
 
-                {/* Top Expense Categories */}
-                {topExpenseCategories.length > 0 && (
+                {/* Pie Chart / Top Categories */}
+                {pieData.length > 0 && (
                     <GlassCard style={styles.sectionCard}>
-                        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Top Expense Categories</Text>
-                        {topExpenseCategories.map((cat, index) => (
-                            <View key={cat.category} style={styles.categoryItem}>
-                                <View style={styles.categoryHeader}>
-                                    <View style={styles.categoryInfo}>
-                                        <View style={[styles.categoryDot, { backgroundColor: getBarColor(index) }]} />
-                                        <Text style={[styles.categoryName, { color: theme.colors.text }]}>{cat.category}</Text>
-                                    </View>
-                                    <AmountDisplay amount={cat.total} size="small" style={{ color: theme.colors.text }} />
-                                </View>
-                                <View style={[styles.progressBar, { backgroundColor: theme.colors.border }]}>
-                                    <View
-                                        style={[
-                                            styles.progressFill,
-                                            {
-                                                width: `${cat.percentage}%`,
-                                                backgroundColor: getBarColor(index)
-                                            }
-                                        ]}
-                                    />
-                                </View>
-                                <Text style={[styles.categoryStats, { color: theme.colors.textSecondary }]}>
-                                    {cat.count} txs • {cat.percentage.toFixed(1)}%
-                                </Text>
-                            </View>
-                        ))}
+                        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Expense Breakdown</Text>
+                        <PieChart
+                            data={pieData}
+                            width={width - 64} // Card padding applied
+                            height={220}
+                            chartConfig={chartConfig}
+                            accessor={"population"}
+                            backgroundColor={"transparent"}
+                            paddingLeft={"15"}
+                            center={[10, 0]}
+                            absolute
+                        />
                     </GlassCard>
                 )}
 
-                {/* Top Income Sources */}
-                {topIncomeCategories.length > 0 && (
-                    <GlassCard style={styles.sectionCard}>
-                        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Top Income Sources</Text>
-                        {topIncomeCategories.map((cat, index) => (
-                            <View key={cat.category} style={styles.categoryItem}>
-                                <View style={styles.categoryHeader}>
-                                    <View style={styles.categoryInfo}>
-                                        <View style={[styles.categoryDot, { backgroundColor: getBarColor(index) }]} />
-                                        <Text style={[styles.categoryName, { color: theme.colors.text }]}>{cat.category}</Text>
-                                    </View>
-                                    <AmountDisplay amount={cat.total} size="small" style={{ color: theme.colors.text }} />
-                                </View>
-                                <View style={[styles.progressBar, { backgroundColor: theme.colors.border }]}>
-                                    <View
-                                        style={[
-                                            styles.progressFill,
-                                            {
-                                                width: `${cat.percentage}%`,
-                                                backgroundColor: getBarColor(index)
-                                            }
-                                        ]}
-                                    />
-                                </View>
-                                <Text style={[styles.categoryStats, { color: theme.colors.textSecondary }]}>
-                                    {cat.count} txs • {cat.percentage.toFixed(1)}%
-                                </Text>
-                            </View>
-                        ))}
-                    </GlassCard>
-                )}
-
-                {/* Monthly Trend (Year view only) */}
+                {/* Monthly Trend (Line Chart) */}
                 {period === 'year' && monthlyTrend.length > 0 && (
                     <GlassCard style={styles.sectionCard}>
-                        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Monthly Trend</Text>
-                        {monthlyTrend.map((data, index) => (
-                            <View key={index} style={styles.trendItem}>
-                                <Text style={[styles.trendMonth, { color: theme.colors.textSecondary }]}>{data.month}</Text>
-                                <View style={styles.trendBars}>
-                                    <View style={[styles.trendBar, { backgroundColor: theme.colors.border }]}>
-                                        <View style={[styles.trendBarFill, { width: `${(data.income / Math.max(...monthlyTrend.map(m => m.income))) * 100}%`, backgroundColor: theme.colors.success }]} />
-                                    </View>
-                                    <View style={[styles.trendBar, { backgroundColor: theme.colors.border }]}>
-                                        <View style={[styles.trendBarFill, { width: `${(data.expenses / Math.max(...monthlyTrend.map(m => m.expenses))) * 100}%`, backgroundColor: theme.colors.error }]} />
-                                    </View>
-                                </View>
-                                <AmountDisplay amount={data.balance} size="small" style={{ color: theme.colors.text, width: 80, textAlign: 'right' }} />
-                            </View>
-                        ))}
+                        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Income vs Expenses</Text>
+                        <LineChart
+                            data={{
+                                labels: monthlyTrend.map(d => d.month),
+                                datasets: [
+                                    {
+                                        data: monthlyTrend.map(d => d.income),
+                                        color: (opacity = 1) => theme.colors.success,
+                                        strokeWidth: 2
+                                    },
+                                    {
+                                        data: monthlyTrend.map(d => d.expenses),
+                                        color: (opacity = 1) => theme.colors.error,
+                                        strokeWidth: 2
+                                    }
+                                ],
+                                legend: ["Income", "Expenses"]
+                            }}
+                            width={width - 64} // Card padding
+                            height={220}
+                            chartConfig={chartConfig}
+                            bezier
+                            style={{
+                                marginVertical: 8,
+                                borderRadius: 16
+                            }}
+                        />
                     </GlassCard>
                 )}
 
@@ -445,69 +417,12 @@ const styles = StyleSheet.create({
     },
     sectionCard: {
         marginBottom: 16,
+        alignItems: 'center'
     },
     sectionTitle: {
         fontSize: 18,
         fontWeight: 'bold',
         marginBottom: 16,
-    },
-    categoryItem: {
-        marginBottom: 16,
-    },
-    categoryHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-    categoryInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    categoryDot: {
-        width: 12,
-        height: 12,
-        borderRadius: 6,
-    },
-    categoryName: {
-        fontSize: 15,
-        fontWeight: '600',
-    },
-    progressBar: {
-        height: 8,
-        borderRadius: 4,
-        overflow: 'hidden',
-        marginBottom: 4,
-    },
-    progressFill: {
-        height: '100%',
-        borderRadius: 4,
-    },
-    categoryStats: {
-        fontSize: 12,
-    },
-    trendItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 12,
-        gap: 12,
-    },
-    trendMonth: {
-        width: 40,
-        fontSize: 12,
-        fontWeight: '600',
-    },
-    trendBars: {
-        flex: 1,
-        gap: 4,
-    },
-    trendBar: {
-        height: 6,
-        borderRadius: 3,
-        overflow: 'hidden',
-    },
-    trendBarFill: {
-        height: '100%',
+        alignSelf: 'flex-start'
     },
 });

@@ -25,12 +25,14 @@ export interface Transaction {
 export const transactionService = {
   getSummary: async (account?: string): Promise<TransactionSummary> => {
     try {
-      const whereClause = account ? `WHERE account = '${account}'` : '';
+      const params: any[] = [];
+      const whereClause = account ? 'WHERE account = ?' : '';
+      if (account) params.push(account);
       
-      const incomeResult = await db.getAllAsync<{ total: number }>(`SELECT SUM(amount) as total FROM income ${whereClause}`);
+      const incomeResult = await db.getAllAsync<{ total: number }>(`SELECT SUM(amount) as total FROM income ${whereClause}`, params);
       const totalIncome = incomeResult[0]?.total || 0;
 
-      const expenseResult = await db.getAllAsync<{ total: number }>(`SELECT SUM(amount) as total FROM expenses ${whereClause}`);
+      const expenseResult = await db.getAllAsync<{ total: number }>(`SELECT SUM(amount) as total FROM expenses ${whereClause}`, params);
       const totalExpenses = expenseResult[0]?.total || 0;
 
       return {
@@ -62,6 +64,17 @@ export const transactionService = {
   },
 
   addTransaction: async (data: Omit<Transaction, 'id' | 'created_at' | 'updated_at'>): Promise<string> => {
+    // Input validation
+    if (!data.amount || data.amount <= 0) {
+      throw new Error('Amount must be greater than zero');
+    }
+    if (data.amount >= 100000000) {
+      throw new Error('Amount exceeds maximum allowed value (₹10Cr)');
+    }
+    if (!data.type || (data.type !== 'expense' && data.type !== 'income')) {
+      throw new Error('Invalid transaction type');
+    }
+
     const id = Crypto.randomUUID();
     const now = Date.now();
     const table = data.type === 'expense' ? 'expenses' : 'income';
@@ -132,13 +145,17 @@ export const transactionService = {
 
   getAll: async (account?: string): Promise<Transaction[]> => {
     try {
-      const whereClause = account ? `WHERE account = '${account}'` : '';
+      const params: any[] = [];
+      const whereClause = account ? 'WHERE account = ?' : '';
+      if (account) params.push(account);
       
       const expenses = await db.getAllAsync<any>(
-        `SELECT id, amount, category, description, date, account, created_at, updated_at, 'expense' as type FROM expenses ${whereClause}`
+        `SELECT id, amount, category, description, date, account, created_at, updated_at, 'expense' as type FROM expenses ${whereClause}`,
+        params
       );
       const income = await db.getAllAsync<any>(
-        `SELECT id, amount, source as category, description, date, account, created_at, updated_at, 'income' as type FROM income ${whereClause}`
+        `SELECT id, amount, source as category, description, date, account, created_at, updated_at, 'income' as type FROM income ${whereClause}`,
+        params
       );
 
       const allTransactions = [...expenses, ...income].sort((a, b) => b.date - a.date);

@@ -29,8 +29,6 @@
       },
       "package": "com.expensetracker.app",
       "permissions": [
-        "READ_SMS",
-        "RECEIVE_SMS",
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",
         "NOTIFICATIONS"

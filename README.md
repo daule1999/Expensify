@@ -4,23 +4,23 @@ A comprehensive offline-first expense tracking application with encryption, anal
 
 ## 🚀 Features
 
-### ✅ Implemented (Chunk 1)
+### ✅ Implemented (Chunk 1 & 2)
 
 - **Offline-First Architecture**: All data stored locally using WatermelonDB
 - **End-to-End Encryption**: AES-256-GCM encryption with PBKDF2 key derivation
 - **Secure Data Storage**: Master password protection with verification
 - **Encrypted Backups**: Automatic daily backups with encryption
 - **Database Models**: Complete schema for expenses, income, investments, debts, EMIs, subscriptions, and accounts
+- **Manual Entry**: dedicated screens for adding expenses and income with category/account selection
+- **Automated SMS Sync**: Auto-detects transaction SMS (Android) and creates expense/income entries
+- **Charts & Analytics**: Visual reports using Pie and Line charts for expense breakdown and monthly trends
+- **Investment & Debt**: Track portfolio value, loans, and recurring subscriptions
 
 ### 🔜 Coming Soon
 
-- Manual expense/income entry
-- Analytics and reporting (daily, weekly, monthly, quarterly, yearly, lifetime)
-- Investment tracking
-- Debt and EMI management
-- Subscription tracking
-- Automated transaction reading from SMS/notifications (Android)
-- Charts and visualizations
+- Advanced export options (CSV/PDF)
+- Budget planning
+- Bill reminders
 
 ## 📦 Tech Stack
 
@@ -162,7 +162,24 @@ npm run ios
 - Charts and visualizations
 - Final polish
 
+
+## ❓ Troubleshooting
+
+### 1. "App Blocked by Play Protect"
+When installing the debug APK, Google Play Protect might block it because it recognizes the debug certificate and sensitive permissions (SMS).
+
+**Solution:**
+1. Click **"More details"** (or the arrow icon).
+2. Click **"Install anyway"**.
+
+### 2. "App Not Installed" Error
+If installation fails immediately:
+1. **Uninstall any previous version** of Expensify/ExpenseTracker from your device.
+2. Android prevents installing a new version with a different signature over an existing one.
+3. Ensure you have sufficient storage space (at least 100MB).
+
 ## 📝 License
+
 
 Private project - All rights reserved
 

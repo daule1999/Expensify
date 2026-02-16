@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Switch, TextInput, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Switch, Modal, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +11,9 @@ import { settingsService, PrivacySettings, ProfileSettings } from '../../service
 import { transactionService } from '../../services/transaction.service';
 import { exportService } from '../../services/export.service';
 import { importService } from '../../services/import.service';
+import { smsService } from '../../services/sms.service';
+import { testService } from '../../services/test.service';
+
 import { usePrivacy } from '../../contexts/PrivacyContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { GOOGLE_AUTH_CONFIG } from '../../config/auth';
@@ -26,12 +29,20 @@ export const SettingsScreen = () => {
     const { refreshSettings } = usePrivacy();
     const { theme, isDark, toggleTheme } = useTheme();
 
+    const [activeSection, setActiveSection] = useState<'main' | 'privacy' | 'data' | 'automation' | 'about'>('main');
+
+    // === Global Settings State ===
     const [privacySettings, setPrivacySettings] = useState<PrivacySettings | null>(null);
     const [profileSettings, setProfileSettings] = useState<ProfileSettings | null>(null);
+    const [isSyncing, setIsSyncing] = useState(false);
 
-    // Cloud Backup State
+    // === Test Runner State ===
+    const [testResults, setTestResults] = useState<any[]>([]);
+    const [isRunningTests, setIsRunningTests] = useState(false);
+    const [showTestModal, setShowTestModal] = useState(false);
+
+    // === Google Auth State ===
     const [accessToken, setAccessToken] = useState<string | null>(null);
-
     const [clientIds, setClientIds] = useState({
         web: GOOGLE_AUTH_CONFIG.webClientId,
         ios: GOOGLE_AUTH_CONFIG.iosClientId,
@@ -61,6 +72,13 @@ export const SettingsScreen = () => {
         loadClientIds();
     }, []);
 
+    const loadSettings = async () => {
+        const privacy = await settingsService.getPrivacySettings();
+        const profile = await settingsService.getProfileSettings();
+        setPrivacySettings(privacy);
+        setProfileSettings(profile);
+    };
+
     const loadClientIds = async () => {
         try {
             const saved = await AsyncStorage.getItem('google_client_ids');
@@ -70,26 +88,31 @@ export const SettingsScreen = () => {
                 setTempClientIds(parsed);
             }
         } catch (e) {
-            console.error('Failed to load client IDs', e);
+            console.error(e);
         }
     };
 
-    const saveClientIds = async () => {
+    const runSelfTest = async () => {
+        setIsRunningTests(true);
+        setShowTestModal(true);
+        setTestResults([]); // Clear previous
+
         try {
-            await AsyncStorage.setItem('google_client_ids', JSON.stringify(tempClientIds));
-            setClientIds(tempClientIds);
-            setShowConfigModal(false);
-            Alert.alert('Success', 'Configuration saved. You can now try signing in.');
+            const results = await testService.runAllTests();
+            setTestResults(results);
         } catch (e) {
-            Alert.alert('Error', 'Failed to save configuration.');
+            Alert.alert('Error', 'Test suite failed to run');
+        } finally {
+            setIsRunningTests(false);
         }
     };
 
-    const loadSettings = async () => {
-        const privacy = await settingsService.getPrivacySettings();
-        const profile = await settingsService.getProfileSettings();
-        setPrivacySettings(privacy);
-        setProfileSettings(profile);
+    // === Handlers (Condensed for clarity) ===
+    const handleUpdateProfile = async (field: keyof ProfileSettings, value: string) => {
+        if (!profileSettings) return;
+        const updated = { ...profileSettings, [field]: value };
+        setProfileSettings(updated);
+        await settingsService.saveProfileSettings(updated);
     };
 
     const handleToggleHideAmounts = async (value: boolean) => {
@@ -100,124 +123,161 @@ export const SettingsScreen = () => {
         await refreshSettings();
     };
 
-    const handleTogglePasswordProtection = async (value: boolean) => {
-        if (!privacySettings) return;
-        const updated = { ...privacySettings, requirePasswordToUnhide: value };
-        setPrivacySettings(updated);
-        await settingsService.savePrivacySettings(updated);
-        await refreshSettings();
-    };
-
-    const handleToggleBiometric = async (value: boolean) => {
-        if (!privacySettings) return;
-        const updated = { ...privacySettings, useBiometric: value };
-        setPrivacySettings(updated);
-        await settingsService.savePrivacySettings(updated);
-        await refreshSettings();
-    };
-
-    const handleUpdateProfile = async (field: keyof ProfileSettings, value: string) => {
-        if (!profileSettings) return;
-        const updated = { ...profileSettings, [field]: value };
-        setProfileSettings(updated);
-        await settingsService.saveProfileSettings(updated);
-    };
-
-    const handleExport = () => {
-        Alert.alert(
-            'Export Data',
-            'Choose a format to export your transactions',
-            [
-                {
-                    text: 'CSV (Excel)',
-                    onPress: async () => {
-                        try {
-                            const transactions = await transactionService.getAll();
-                            await exportService.exportToCSV(transactions);
-                        } catch (error) {
-                            Alert.alert('Error', error instanceof Error ? error.message : 'Failed to export to CSV');
-                        }
-                    }
-                },
-                {
-                    text: 'JSON (Backup)',
-                    onPress: async () => {
-                        try {
-                            const transactions = await transactionService.getAll();
-                            await exportService.exportToJSON(transactions);
-                        } catch (error) {
-                            Alert.alert('Error', error instanceof Error ? error.message : 'Failed to export to JSON');
-                        }
-                    }
-                },
-                { text: 'Cancel', style: 'cancel' }
-            ]
-        );
+    const handleExport = async () => {
+        Alert.alert('Export', 'Choose format', [
+            {
+                text: 'CSV', onPress: async () => {
+                    try {
+                        await exportService.exportToCSV(await transactionService.getAll());
+                    } catch (e: any) { Alert.alert('Error', e.message); }
+                }
+            },
+            {
+                text: 'JSON', onPress: async () => {
+                    try {
+                        await exportService.exportToJSON(await transactionService.getAll());
+                    } catch (e: any) { Alert.alert('Error', e.message); }
+                }
+            },
+            { text: 'Cancel', style: 'cancel' }
+        ]);
     };
 
     const handleImport = async () => {
         try {
             const result = await importService.pickDocument();
             if (result.canceled) return;
-            const transactions = await importService.readJSONFile(result.assets[0].uri);
-            Alert.alert(
-                'Confirm Import',
-                `Found ${transactions.length} transactions. Do you want to import them?`,
-                [
-                    { text: 'Cancel', style: 'cancel' },
-                    {
-                        text: 'Import',
-                        onPress: async () => {
-                            try {
-                                const count = await transactionService.importTransactions(transactions);
-                                Alert.alert('Success', `Successfully imported ${count} transactions.`);
-                            } catch (error) {
-                                Alert.alert('Error', 'Failed to save transactions.');
+            const uri = result.assets[0].uri;
+            const name = result.assets[0].name || '';
+
+            let transactions;
+            if (name.toLowerCase().endsWith('.csv')) {
+                transactions = await importService.readCSVFile(uri);
+            } else {
+                transactions = await importService.readJSONFile(uri);
+            }
+
+            const count = await transactionService.importTransactions(transactions);
+            Alert.alert('Success', `Imported ${count} transactions successfully`);
+        } catch (e: any) {
+            Alert.alert('Error', e.message || 'Import failed');
+        }
+    };
+
+    const saveClientIds = async () => {
+        await AsyncStorage.setItem('google_client_ids', JSON.stringify(tempClientIds));
+        setClientIds(tempClientIds);
+        setShowConfigModal(false);
+    };
+
+
+    // === Render Helpers for Sections ===
+
+    const renderMainProfileCard = () => (
+        <GlassCard style={styles.card}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+                <View style={[styles.avatarPlaceholder, { backgroundColor: theme.colors.primary }]}>
+                    <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#FFF' }}>
+                        {profileSettings?.name?.charAt(0) || 'U'}
+                    </Text>
+                </View>
+                <View style={{ marginLeft: 16, flex: 1 }}>
+                    <GlassInput
+                        value={profileSettings?.name || ''}
+                        onChangeText={(t) => handleUpdateProfile('name', t)}
+                        placeholder="Your Name"
+                        style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 4, height: 40 }}
+                    />
+                    <Text style={{ color: theme.colors.textSecondary }}>{profileSettings?.email || 'No email set'}</Text>
+                </View>
+            </View>
+        </GlassCard>
+    );
+
+    const renderMenuItem = (icon: string, title: string, subtitle: string, onPress: () => void, color?: string) => (
+        <TouchableOpacity style={styles.menuItem} onPress={onPress}>
+            <View style={[styles.iconContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}>
+                <Ionicons name={icon as any} size={22} color={color || theme.colors.primary} />
+            </View>
+            <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={[styles.menuTitle, { color: theme.colors.text }]}>{title}</Text>
+                <Text style={[styles.menuSubtitle, { color: theme.colors.textSecondary }]}>{subtitle}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
+        </TouchableOpacity>
+    );
+
+    const renderPrivacySection = () => (
+        <View>
+            <TouchableOpacity onPress={() => setActiveSection('main')} style={styles.backButton}>
+                <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
+                <Text style={[styles.backText, { color: theme.colors.text }]}>Back to Settings</Text>
+            </TouchableOpacity>
+
+            <Text style={[styles.sectionHeader, { color: theme.colors.text }]}>Privacy & Security</Text>
+            <GlassCard style={styles.card}>
+                <View style={styles.settingRow}>
+                    <Text style={{ color: theme.colors.text, flex: 1 }}>Hide Amounts (****)</Text>
+                    <Switch
+                        value={privacySettings?.hideAmounts}
+                        onValueChange={handleToggleHideAmounts}
+                        trackColor={{ true: theme.colors.primary, false: theme.colors.border }}
+                    />
+                </View>
+                <View style={styles.divider} />
+                <View style={styles.settingRow}>
+                    <Text style={{ color: theme.colors.text, flex: 1 }}>Biometric Unlock</Text>
+                    <Switch
+                        value={privacySettings?.useBiometric}
+                        onValueChange={(v) => {
+                            if (privacySettings) {
+                                const updated = { ...privacySettings, useBiometric: v };
+                                setPrivacySettings(updated);
+                                settingsService.savePrivacySettings(updated);
                             }
-                        }
-                    }
-                ]
-            );
-        } catch (error) {
-            Alert.alert('Error', error instanceof Error ? error.message : 'Import failed');
-        }
-    };
+                        }}
+                        trackColor={{ true: theme.colors.primary, false: theme.colors.border }}
+                    />
+                </View>
+            </GlassCard>
+        </View>
+    );
 
-    const handleGoogleSignIn = async () => {
-        if (clientIds.android.includes('YOUR_ANDROID_CLIENT_ID')) {
-            Alert.alert(
-                'Configuration Required',
-                'Please configure your Google Client IDs first.',
-                [
-                    { text: 'Cancel', style: 'cancel' },
-                    { text: 'Configure Now', onPress: () => setShowConfigModal(true) }
-                ]
-            );
-            return;
-        }
-        promptAsync();
-    };
+    const renderAboutSection = () => (
+        <View>
+            <TouchableOpacity onPress={() => setActiveSection('main')} style={styles.backButton}>
+                <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
+                <Text style={[styles.backText, { color: theme.colors.text }]}>Back to Settings</Text>
+            </TouchableOpacity>
 
-    const handleBackup = async () => {
-        if (!accessToken) {
-            Alert.alert('Error', 'Please sign in to Google Drive first.');
-            return;
-        }
-        try {
-            await import('../../services/backup.service').then(m => m.backupService.uploadBackup(accessToken));
-            Alert.alert('Success', 'Backup uploaded successfully!');
-        } catch (error) {
-            Alert.alert('Error', 'Backup failed.');
-        }
-    };
+            <Text style={[styles.sectionHeader, { color: theme.colors.text }]}>About & Help</Text>
 
-    const handleRestore = async () => {
-        if (!accessToken) return;
-        Alert.alert('Restore', 'Feature to list and restore backups would open here.');
-    };
+            <GlassCard style={styles.card}>
+                <Text style={[styles.aboutText, { color: theme.colors.text }]}>
+                    <Text style={{ fontWeight: 'bold' }}>Expensify v1.0.0</Text>{'\n'}
+                    Offline-First Expense Tracker
+                </Text>
+                <Text style={[styles.aboutText, { color: theme.colors.textSecondary, marginTop: 10 }]}>
+                    • Transactions are stored locally on your device.{'\n'}
+                    • Backups are encrypted with AES-256.{'\n'}
+                    • SMS processing happens strictly on-device.
+                </Text>
+            </GlassCard>
 
-    if (!privacySettings || !profileSettings) return null;
+            <Text style={[styles.sectionHeader, { color: theme.colors.text, fontSize: 16, marginTop: 20 }]}>Diagnostics</Text>
+            <GlassCard style={styles.card}>
+                <TouchableOpacity style={styles.testButton} onPress={runSelfTest}>
+                    <Ionicons name="pulse" size={24} color="#FFF" />
+                    <Text style={{ color: '#FFF', fontWeight: 'bold', marginLeft: 8 }}>Run Health Check</Text>
+                </TouchableOpacity>
+                <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginTop: 8, textAlign: 'center' }}>
+                    Tests database integrity, encryption, and SMS logic.
+                </Text>
+            </GlassCard>
+        </View>
+    );
 
+    // === Main Render ===
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
             <LinearGradient
@@ -225,297 +285,136 @@ export const SettingsScreen = () => {
                 style={StyleSheet.absoluteFill}
             />
 
-            <GlassHeader title="Settings" />
-
-            <Modal
-                visible={showConfigModal}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={() => setShowConfigModal(false)}
-            >
-                <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
-                    <GlassCard style={styles.modalContent}>
-                        <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Google Drive Configuration</Text>
-                        <Text style={[styles.modalSubtitle, { color: theme.colors.textSecondary }]}>
-                            Enter your Client IDs from Google Cloud Console.
-                        </Text>
-
-                        <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Android Client ID</Text>
-                        <GlassInput
-                            value={tempClientIds.android}
-                            onChangeText={(text) => setTempClientIds({ ...tempClientIds, android: text })}
-                            placeholder="xyz...apps.googleusercontent.com"
-                        />
-
-                        <Text style={[styles.inputLabel, { color: theme.colors.text }]}>iOS Client ID</Text>
-                        <GlassInput
-                            value={tempClientIds.ios}
-                            onChangeText={(text) => setTempClientIds({ ...tempClientIds, ios: text })}
-                            placeholder="xyz...apps.googleusercontent.com"
-                        />
-
-                        <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Web Client ID</Text>
-                        <GlassInput
-                            value={tempClientIds.web}
-                            onChangeText={(text) => setTempClientIds({ ...tempClientIds, web: text })}
-                            placeholder="xyz...apps.googleusercontent.com"
-                        />
-
-                        <View style={styles.modalButtons}>
-                            <TouchableOpacity
-                                style={[styles.modalButton, { borderColor: theme.colors.border, borderWidth: 1 }]}
-                                onPress={() => setShowConfigModal(false)}
-                            >
-                                <Text style={{ color: theme.colors.text }}>Cancel</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[styles.modalButton, { backgroundColor: theme.colors.primary }]}
-                                onPress={saveClientIds}
-                            >
-                                <Text style={{ color: 'white', fontWeight: 'bold' }}>Save & Close</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </GlassCard>
-                </View>
-            </Modal>
+            <GlassHeader title="Settings" showBack={activeSection !== 'main'} onBack={() => setActiveSection('main')} />
 
             <ScrollView contentContainerStyle={styles.content}>
 
-                {/* Appearance Section */}
-                <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Appearance</Text>
-                <GlassCard style={styles.card}>
-                    <View style={styles.settingRow}>
-                        <View style={styles.settingInfo}>
-                            <Text style={[styles.settingLabel, { color: theme.colors.text }]}>Dark Mode</Text>
-                            <Text style={[styles.settingHint, { color: theme.colors.textSecondary }]}>
-                                {isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-                            </Text>
-                        </View>
-                        <Switch
-                            value={isDark}
-                            onValueChange={toggleTheme}
-                            trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
-                            thumbColor={isDark ? '#FFF' : '#FFF'}
-                        />
-                    </View>
-                </GlassCard>
+                {activeSection === 'main' && (
+                    <>
+                        {renderMainProfileCard()}
 
-                {/* Profile Section */}
-                <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Profile</Text>
-                <GlassCard style={styles.card}>
-                    <GlassInput
-                        label="Name"
-                        value={profileSettings.name}
-                        onChangeText={(text) => handleUpdateProfile('name', text)}
-                        placeholder="Enter your name"
-                        icon="person-outline"
-                    />
-                    <GlassInput
-                        label="Email"
-                        value={profileSettings.email}
-                        onChangeText={(text) => handleUpdateProfile('email', text)}
-                        placeholder="Enter your email"
-                        keyboardType="email-address"
-                        icon="mail-outline"
-                    />
-                    <GlassInput
-                        label="Currency Symbol"
-                        value={profileSettings.currency}
-                        onChangeText={(text) => handleUpdateProfile('currency', text)}
-                        placeholder="₹"
-                        icon="cash-outline"
-                    />
-                </GlassCard>
+                        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Preferences</Text>
+                        <GlassCard style={styles.card}>
+                            {renderMenuItem('moon-outline', 'Appearance', isDark ? 'Dark Mode' : 'Light Mode', toggleTheme)}
+                            <View style={styles.divider} />
+                            {renderMenuItem('wallet-outline', 'Accounts', 'Bank accounts, UPI, Cash', () => navigation.navigate('AccountSettings' as never))}
+                            <View style={styles.divider} />
+                            {renderMenuItem('pie-chart-outline', 'Budgets', 'Set spending limits', () => navigation.navigate('Budgets' as never))}
+                            <View style={styles.divider} />
+                            {renderMenuItem('shield-checkmark-outline', 'Privacy & Security', 'Biometrics, App Lock', () => setActiveSection('privacy'))}
+                        </GlassCard>
 
-                {/* Privacy Section */}
-                <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Privacy</Text>
-                <GlassCard style={styles.card}>
-                    <View style={styles.settingRow}>
-                        <View style={styles.settingInfo}>
-                            <Text style={[styles.settingLabel, { color: theme.colors.text }]}>Hide Amounts</Text>
-                            <Text style={[styles.settingHint, { color: theme.colors.textSecondary }]}>Show **** instead of amounts</Text>
-                        </View>
-                        <Switch
-                            value={privacySettings.hideAmounts}
-                            onValueChange={handleToggleHideAmounts}
-                            trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
-                            thumbColor={isDark ? '#FFF' : '#FFF'}
-                        />
-                    </View>
-                    <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+                        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Data</Text>
+                        <GlassCard style={styles.card}>
+                            {renderMenuItem('cloud-upload-outline', 'Backup & Restore', 'Google Drive / Local', () => setShowConfigModal(true))}
+                            <View style={styles.divider} />
+                            {renderMenuItem('download-outline', 'Export Data', 'CSV / JSON', handleExport)}
+                            <View style={styles.divider} />
+                            {renderMenuItem('exit-outline', 'Import Data', 'CSV / JSON', handleImport)}
+                        </GlassCard>
 
-                    <View style={styles.settingRow}>
-                        <View style={styles.settingInfo}>
-                            <Text style={[styles.settingLabel, { color: theme.colors.text }]}>Require Password</Text>
-                            <Text style={[styles.settingHint, { color: theme.colors.textSecondary }]}>Use app password to unhide</Text>
-                        </View>
-                        <Switch
-                            value={privacySettings.requirePasswordToUnhide}
-                            onValueChange={handleTogglePasswordProtection}
-                            trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
-                            disabled={!privacySettings.hideAmounts}
-                        />
-                    </View>
-                    <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+                        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Automation</Text>
+                        <GlassCard style={styles.card}>
+                            {renderMenuItem('chatbubbles-outline', 'SMS Sync', 'Android Only', async () => {
+                                // Quick SMS Sync trigger
+                                try {
+                                    setIsSyncing(true);
+                                    await smsService.syncAllTransactions();
+                                    Alert.alert('Synced', 'SMS transactions updated');
+                                } catch (e) { Alert.alert('Error', 'Sync failed'); }
+                                finally { setIsSyncing(false); }
+                            })}
+                            <View style={styles.divider} />
+                            {renderMenuItem('repeat-outline', 'Recurring', 'Auto-create transactions', () => navigation.navigate('Recurring' as never))}
+                        </GlassCard>
 
-                    <View style={styles.settingRow}>
-                        <View style={styles.settingInfo}>
-                            <Text style={[styles.settingLabel, { color: theme.colors.text }]}>Use Biometric</Text>
-                            <Text style={[styles.settingHint, { color: theme.colors.textSecondary }]}>FaceID / TouchID</Text>
-                        </View>
-                        <Switch
-                            value={privacySettings.useBiometric}
-                            onValueChange={handleToggleBiometric}
-                            trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
-                            disabled={!privacySettings.requirePasswordToUnhide}
-                        />
-                    </View>
-                </GlassCard>
+                        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Other</Text>
+                        <GlassCard style={styles.card}>
+                            {renderMenuItem('information-circle-outline', 'About & Help', 'Version, Diagnostics', () => setActiveSection('about'))}
+                        </GlassCard>
+                    </>
+                )}
 
-                {/* App Settings */}
-                <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Configuration</Text>
-                <GlassCard style={styles.card}>
-                    <TouchableOpacity
-                        style={styles.menuItem}
-                        onPress={() => navigation.navigate('ExpenseSettings' as never)}
-                    >
-                        <Ionicons name="settings-outline" size={24} color={theme.colors.primary} />
-                        <Text style={[styles.menuText, { color: theme.colors.text }]}>Expense Settings</Text>
-                        <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
-                    </TouchableOpacity>
-                    <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+                {activeSection === 'privacy' && renderPrivacySection()}
+                {activeSection === 'about' && renderAboutSection()}
 
-                    <TouchableOpacity
-                        style={styles.menuItem}
-                        onPress={() => navigation.navigate('AccountSettings' as never)}
-                    >
-                        <Ionicons name="wallet-outline" size={24} color={theme.colors.primary} />
-                        <Text style={[styles.menuText, { color: theme.colors.text }]}>Account Settings</Text>
-                        <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
-                    </TouchableOpacity>
-                </GlassCard>
-
-                {/* Cloud Backup Section */}
-                <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Cloud Backup</Text>
-                <GlassCard style={styles.card}>
-                    <TouchableOpacity
-                        style={styles.configButton}
-                        onPress={() => setShowConfigModal(true)}
-                    >
-                        <Ionicons name="settings-sharp" size={16} color={theme.colors.textSecondary} />
-                        <Text style={[styles.configButtonText, { color: theme.colors.textSecondary }]}>Configure IDs</Text>
-                    </TouchableOpacity>
-
-                    {!accessToken ? (
-                        <TouchableOpacity style={styles.menuItem} onPress={handleGoogleSignIn}>
-                            <Ionicons name="logo-google" size={24} color="#DB4437" />
-                            <Text style={[styles.menuText, { color: theme.colors.text }]}>Connect Google Drive</Text>
-                            <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
-                        </TouchableOpacity>
-                    ) : (
-                        <>
-                            <View style={styles.settingRow}>
-                                <View style={styles.settingInfo}>
-                                    <Text style={[styles.settingLabel, { color: theme.colors.text }]}>Google Drive Connected</Text>
-                                    <Text style={[styles.settingHint, { color: theme.colors.success }]}>Ready to backup</Text>
-                                </View>
-                                <Ionicons name="checkmark-circle" size={24} color={theme.colors.success} />
-                            </View>
-                            <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
-
-                            <TouchableOpacity style={styles.menuItem} onPress={handleBackup}>
-                                <Ionicons name="cloud-upload" size={24} color={theme.colors.primary} />
-                                <Text style={[styles.menuText, { color: theme.colors.text }]}>Backup Now</Text>
+                {/* Backup Config Modal (Simplified) */}
+                <Modal visible={showConfigModal} transparent animationType="fade" onRequestClose={() => setShowConfigModal(false)}>
+                    <View style={styles.modalOverlay}>
+                        <GlassCard style={styles.modalContent}>
+                            <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Cloud Backup</Text>
+                            <TouchableOpacity style={styles.modalButton} onPress={() => { promptAsync(); setShowConfigModal(false); }}>
+                                <Text style={{ color: '#FFF' }}>Sign in with Google</Text>
                             </TouchableOpacity>
-                            <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
-
-                            <TouchableOpacity style={styles.menuItem} onPress={handleRestore}>
-                                <Ionicons name="cloud-download" size={24} color={theme.colors.primary} />
-                                <Text style={[styles.menuText, { color: theme.colors.text }]}>Restore from Backup</Text>
+                            <TouchableOpacity style={[styles.modalButton, { backgroundColor: theme.colors.card, marginTop: 10 }]} onPress={() => setShowConfigModal(false)}>
+                                <Text style={{ color: theme.colors.text }}>Cancel</Text>
                             </TouchableOpacity>
-                        </>
-                    )}
-                </GlassCard>
+                        </GlassCard>
+                    </View>
+                </Modal>
 
-                {/* Data Management */}
-                <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Data Management</Text>
-                <GlassCard style={styles.card}>
-                    <TouchableOpacity style={styles.menuItem} onPress={handleExport}>
-                        <Ionicons name="download-outline" size={24} color={theme.colors.primary} />
-                        <Text style={[styles.menuText, { color: theme.colors.text }]}>Export Data (CSV/JSON)</Text>
-                        <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
-                    </TouchableOpacity>
-                    <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+                {/* Test Results Modal */}
+                <Modal visible={showTestModal} transparent animationType="slide" onRequestClose={() => setShowTestModal(false)}>
+                    <View style={styles.modalOverlay}>
+                        <GlassCard style={[styles.modalContent, { maxHeight: '80%' }]}>
+                            <Text style={[styles.modalTitle, { color: theme.colors.text }]}>System Health Check</Text>
 
-                    <TouchableOpacity style={styles.menuItem} onPress={handleImport}>
-                        <Ionicons name="cloud-upload-outline" size={24} color={theme.colors.primary} />
-                        <Text style={[styles.menuText, { color: theme.colors.text }]}>Import Data</Text>
-                        <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
-                    </TouchableOpacity>
-                </GlassCard>
+                            {isRunningTests ? (
+                                <ActivityIndicator size="large" color={theme.colors.primary} />
+                            ) : (
+                                <ScrollView>
+                                    {testResults.map((res, i) => (
+                                        <View key={i} style={styles.testResultRow}>
+                                            <Ionicons
+                                                name={res.status === 'passed' ? 'checkmark-circle' : 'alert-circle'}
+                                                size={24}
+                                                color={res.status === 'passed' ? theme.colors.success : theme.colors.error}
+                                            />
+                                            <View style={{ marginLeft: 12, flex: 1 }}>
+                                                <Text style={[styles.testName, { color: theme.colors.text }]}>{res.name}</Text>
+                                                {res.message && <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>{res.message}</Text>}
+                                            </View>
+                                            {res.duration && <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>{res.duration}ms</Text>}
+                                        </View>
+                                    ))}
+                                </ScrollView>
+                            )}
 
-                {/* Version Info */}
-                <Text style={[styles.versionText, { color: theme.colors.textSecondary }]}>v1.0.0 • Glass UI</Text>
+                            <TouchableOpacity style={[styles.modalButton, { marginTop: 20 }]} onPress={() => setShowTestModal(false)}>
+                                <Text style={{ color: '#FFF' }}>Close</Text>
+                            </TouchableOpacity>
+                        </GlassCard>
+                    </View>
+                </Modal>
+
             </ScrollView>
         </View>
     );
 };
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-    },
-    content: {
-        padding: 20,
-        paddingTop: 110,
-        paddingBottom: 120,
-    },
-    sectionTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        marginBottom: 10,
-        marginTop: 10,
-        marginLeft: 5,
-    },
-    card: {
-        marginBottom: 20,
-    },
-    settingRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingVertical: 12,
-    },
-    settingInfo: {
-        flex: 1,
-        marginRight: 16,
-    },
-    settingLabel: {
-        fontSize: 16,
-        marginBottom: 4,
-    },
-    settingHint: {
-        fontSize: 12,
-    },
-    menuItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 12,
-        gap: 12,
-    },
-    menuText: {
-        flex: 1,
-        fontSize: 16,
-    },
-    divider: {
-        height: 1,
-        opacity: 0.3,
-        marginVertical: 5,
-    },
-    versionText: {
-        textAlign: 'center',
-        marginTop: 20,
-        marginBottom: 40,
-        opacity: 0.5,
-    }
+    container: { flex: 1 },
+    content: { padding: 16, paddingTop: 110, paddingBottom: 140 },
+    sectionTitle: { fontSize: 14, fontWeight: 'bold', marginTop: 24, marginBottom: 8, opacity: 0.7, textTransform: 'uppercase' },
+    card: { padding: 16, borderRadius: 16 },
+    avatarPlaceholder: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center' },
+    menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
+    iconContainer: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+    menuTitle: { fontSize: 16, fontWeight: '600' },
+    menuSubtitle: { fontSize: 12, marginTop: 2 },
+    divider: { height: 1, backgroundColor: 'rgba(150,150,150,0.1)', marginVertical: 4 },
+    // Sub-section styles
+    backButton: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
+    backText: { fontSize: 16, marginLeft: 8, fontWeight: '600' },
+    sectionHeader: { fontSize: 24, fontWeight: 'bold', marginBottom: 16 },
+    settingRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
+    aboutText: { fontSize: 14, lineHeight: 22 },
+    testButton: { backgroundColor: '#4CAF50', padding: 16, borderRadius: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
+    // Modal
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 20 },
+    modalContent: { padding: 24, borderRadius: 24 },
+    modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
+    modalButton: { backgroundColor: '#2196F3', padding: 14, borderRadius: 12, alignItems: 'center' },
+    testResultRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(150,150,150,0.1)' },
+    testName: { fontSize: 16, fontWeight: '500' },
 });
