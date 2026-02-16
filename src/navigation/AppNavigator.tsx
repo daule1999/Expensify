@@ -1,4 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { View, ActivityIndicator } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { NavigationContainer } from '@react-navigation/native';
@@ -26,6 +28,10 @@ import { BudgetScreen } from '../screens/budget/BudgetScreen';
 import { AddBudgetScreen } from '../screens/budget/AddBudgetScreen';
 import { RecurringScreen } from '../screens/recurring/RecurringScreen';
 import { AddRecurringScreen } from '../screens/recurring/AddRecurringScreen';
+import { OnboardingScreen } from '../screens/onboarding/OnboardingScreen';
+import { UnlockScreen } from '../screens/auth/UnlockScreen';
+import { encryptionService } from '../services/encryption.service';
+import { settingsService } from '../services/settings.service';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -53,9 +59,60 @@ const TabNavigator = () => {
 };
 
 export const AppNavigator = () => {
+    const [isLoading, setIsLoading] = useState(true);
+    const [initialRoute, setInitialRoute] = useState<'Onboarding' | 'Unlock' | 'MainTabs'>('Onboarding');
+
+    useEffect(() => {
+        checkAppStatus();
+    }, []);
+
+    const checkAppStatus = async () => {
+        try {
+            const hasOnboarded = await AsyncStorage.getItem('has_onboarded');
+
+            if (hasOnboarded !== 'true') {
+                setInitialRoute('Onboarding');
+            } else {
+                // Check if encryption is set up and if lock is required
+                const isEncrypted = await encryptionService.isSetup();
+                const privacySettings = await settingsService.getPrivacySettings();
+
+                if (isEncrypted && privacySettings.requireLockOnStartup) {
+                    setInitialRoute('Unlock');
+                } else {
+                    setInitialRoute('MainTabs');
+                }
+            }
+        } catch (e) {
+            console.error(e);
+            setInitialRoute('MainTabs');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    if (isLoading) {
+        return (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                <ActivityIndicator size="large" color="#2196F3" />
+            </View>
+        );
+    }
+
     return (
         <NavigationContainer>
-            <Stack.Navigator screenOptions={{ headerShown: false }}>
+            <Stack.Navigator
+                initialRouteName={initialRoute}
+                screenOptions={{ headerShown: false }}
+            >
+                <Stack.Screen
+                    name="Onboarding"
+                    component={OnboardingScreen}
+                />
+                <Stack.Screen
+                    name="Unlock"
+                    component={UnlockScreen}
+                />
                 <Stack.Screen
                     name="MainTabs"
                     component={TabNavigator}

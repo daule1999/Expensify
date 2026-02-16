@@ -170,10 +170,21 @@ export const ExpensesScreen = () => {
                     }
                     ListEmptyComponent={
                         <View style={styles.emptyState}>
-                            <Text style={[styles.emptyText, { color: theme.colors.text }]}>No transactions found</Text>
+                            <View style={[styles.emptyIconContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#f9f9f9' }]}>
+                                <Ionicons name="receipt-outline" size={60} color={theme.colors.textSecondary} />
+                            </View>
+                            <Text style={[styles.emptyText, { color: theme.colors.text }]}>No Transactions Found</Text>
                             <Text style={[styles.emptySubText, { color: theme.colors.textSecondary }]}>
-                                {searchQuery || filters.category || filters.account ? 'Try adjusting your filters' : 'Tap the + button to add one'}
+                                {searchQuery || filters.category || filters.account ? 'Try adjusting your search or filters to find what you looking for.' : 'Start tracking your spending by adding your first expense.'}
                             </Text>
+                            {!searchQuery && !filters.category && !filters.account && (
+                                <TouchableOpacity
+                                    style={[styles.emptyButton, { backgroundColor: theme.colors.primary }]}
+                                    onPress={handleAddPress}
+                                >
+                                    <Text style={styles.emptyButtonText}>Add Expense</Text>
+                                </TouchableOpacity>
+                            )}
                         </View>
                     }
                 />
@@ -272,15 +283,38 @@ const styles = StyleSheet.create({
         elevation: 6,
     },
     emptyState: {
-        padding: 40,
+        padding: 60,
         alignItems: 'center',
+        justifyContent: 'center',
+    },
+    emptyIconContainer: {
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 20,
     },
     emptyText: {
-        fontSize: 18,
+        fontSize: 20,
         fontWeight: 'bold',
-        marginBottom: 8,
+        marginBottom: 10,
+        textAlign: 'center',
     },
     emptySubText: {
-        fontSize: 14,
+        fontSize: 15,
+        textAlign: 'center',
+        lineHeight: 22,
+        marginBottom: 24,
+    },
+    emptyButton: {
+        paddingVertical: 12,
+        paddingHorizontal: 24,
+        borderRadius: 25,
+    },
+    emptyButtonText: {
+        color: '#FFF',
+        fontWeight: 'bold',
+        fontSize: 16,
     },
 });

@@ -1,6 +1,8 @@
 import { db } from '../database';
 import { auditService } from './audit.service';
 import * as Crypto from 'expo-crypto';
+import { notificationService } from './notification.service';
+import { budgetService } from './budget.service';
 
 export interface TransactionSummary {
   totalBalance: number;
@@ -85,6 +87,28 @@ export const transactionService = {
           `INSERT INTO expenses (id, amount, category, description, date, account, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
           [id, data.amount, data.category || 'Uncategorized', data.description || '', data.date, data.account || 'Cash', now, now]
         );
+
+        // Budget Check
+        try {
+          const category = data.category || 'Uncategorized';
+          const budget = await db.getFirstAsync<any>(
+            `SELECT * FROM budgets WHERE category = ? AND is_active = 1`,
+            [category]
+          );
+          if (budget) {
+            const { startMs, endMs } = budgetService.getPeriodRange(budget.period);
+            const spentResult = await db.getAllAsync<{ total: number }>(
+              `SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE category = ? AND date >= ? AND date <= ?`,
+              [category, startMs, endMs]
+            );
+            const spent = spentResult[0]?.total || 0;
+            if (spent > budget.amount) {
+              await notificationService.showBudgetAlert(category, spent, budget.amount);
+            }
+          }
+        } catch (budgetError) {
+          console.error('Error in budget alert check:', budgetError);
+        }
       } else {
         await db.runAsync(
           `INSERT INTO income (id, amount, source, description, date, account, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,

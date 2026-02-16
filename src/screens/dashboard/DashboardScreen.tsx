@@ -9,6 +9,7 @@ import { PieChart } from 'react-native-chart-kit';
 import { useTheme } from '../../contexts/ThemeContext';
 import { usePrivacy } from '../../contexts/PrivacyContext';
 import { GlassCard } from '../../components/GlassCard';
+import { Skeleton } from '../../components/Skeleton';
 
 import { transactionService, Transaction } from '../../services/transaction.service';
 import { subscriptionService } from '../../services/subscription.service';
@@ -26,6 +27,7 @@ export const DashboardScreen = () => {
     const [balance, setBalance] = useState(0);
     const [totalIncome, setTotalIncome] = useState(0);
     const [totalExpense, setTotalExpense] = useState(0);
+    const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
     const [netWorth, setNetWorth] = useState(0);
@@ -72,6 +74,8 @@ export const DashboardScreen = () => {
 
         } catch (error) {
             console.error('Failed to load dashboard data', error);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -159,36 +163,44 @@ export const DashboardScreen = () => {
                         adjustsFontSizeToFit
                         numberOfLines={1}
                     >
-                        {formatCurrency(netWorth)}
+                        {loading ? <Skeleton width={150} height={40} /> : formatCurrency(netWorth)}
                     </Text>
                 </View>
 
                 {/* Giant Pie Chart Centerpiece */}
                 <View style={styles.chartContainer}>
-                    <PieChart
-                        data={chartData}
-                        width={screenWidth - 40}
-                        height={200}
-                        chartConfig={{
-                            color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-                        }}
-                        accessor={"population"}
-                        backgroundColor={"transparent"}
-                        paddingLeft={"0"}
-                        center={[0, 0]}
-                        absolute
-                        hasLegend={false}
-                    />
+                    {loading ? (
+                        <Skeleton width={screenWidth - 40} height={200} borderRadius={100} />
+                    ) : (
+                        <PieChart
+                            data={chartData}
+                            width={screenWidth - 40}
+                            height={200}
+                            chartConfig={{
+                                color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+                            }}
+                            accessor={"population"}
+                            backgroundColor={"transparent"}
+                            paddingLeft={"0"}
+                            center={[0, 0]}
+                            absolute
+                            hasLegend={false}
+                        />
+                    )}
                     {/* Custom Legend */}
                     <View style={styles.legendContainer}>
-                        {chartData.map((item, index) => (
-                            <View key={index} style={styles.legendItem}>
-                                <View style={[styles.legendDot, { backgroundColor: item.color }]} />
-                                <Text style={[styles.legendText, { color: theme.colors.textSecondary }]} numberOfLines={1}>
-                                    {formatCompact(item.population)} {item.name}
-                                </Text>
-                            </View>
-                        ))}
+                        {loading ? (
+                            [1, 2, 3].map(i => <Skeleton key={i} width={80} height={15} style={{ marginRight: 10, marginBottom: 10 }} />)
+                        ) : (
+                            chartData.map((item, index) => (
+                                <View key={index} style={styles.legendItem}>
+                                    <View style={[styles.legendDot, { backgroundColor: item.color }]} />
+                                    <Text style={[styles.legendText, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+                                        {formatCompact(item.population)} {item.name}
+                                    </Text>
+                                </View>
+                            ))
+                        )}
                     </View>
                 </View>
 
@@ -199,7 +211,7 @@ export const DashboardScreen = () => {
                             <Ionicons name="arrow-down-circle" size={24} color={theme.colors.success} />
                             <View style={{ flex: 1 }}>
                                 <Text style={[styles.summaryLabel, { color: theme.colors.textSecondary }]}>Income</Text>
-                                <Text style={[styles.summaryValue, { color: theme.colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatCompact(totalIncome)}</Text>
+                                {loading ? <Skeleton width={60} height={20} /> : <Text style={[styles.summaryValue, { color: theme.colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatCompact(totalIncome)}</Text>}
                             </View>
                         </View>
                     </GlassCard>
@@ -209,7 +221,7 @@ export const DashboardScreen = () => {
                             <Ionicons name="arrow-up-circle" size={24} color={theme.colors.error} />
                             <View style={{ flex: 1 }}>
                                 <Text style={[styles.summaryLabel, { color: theme.colors.textSecondary }]}>Expense</Text>
-                                <Text style={[styles.summaryValue, { color: theme.colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatCompact(totalExpense)}</Text>
+                                {loading ? <Skeleton width={60} height={20} /> : <Text style={[styles.summaryValue, { color: theme.colors.text }]} numberOfLines={1} adjustsFontSizeToFit>{formatCompact(totalExpense)}</Text>}
                             </View>
                         </View>
                     </GlassCard>
@@ -248,29 +260,18 @@ export const DashboardScreen = () => {
 
                 {/* Financial Summary Grid */}
                 <View style={styles.grid}>
-                    <GlassCard style={styles.gridItem}>
-                        <Ionicons name="cash-outline" size={24} color={theme.colors.info} />
-                        <Text style={[styles.gridLabel, { color: theme.colors.textSecondary }]}>Cash Balance</Text>
-                        <Text style={[styles.gridValue, { color: theme.colors.text }]}>{formatCurrency(balance)}</Text>
-                    </GlassCard>
-
-                    <GlassCard style={styles.gridItem}>
-                        <Ionicons name="trending-up" size={24} color={theme.colors.primary} />
-                        <Text style={[styles.gridLabel, { color: theme.colors.textSecondary }]}>Invested</Text>
-                        <Text style={[styles.gridValue, { color: theme.colors.text }]}>{formatCurrency(investedAmount)}</Text>
-                    </GlassCard>
-
-                    <GlassCard style={styles.gridItem}>
-                        <Ionicons name="trending-down" size={24} color={theme.colors.error} />
-                        <Text style={[styles.gridLabel, { color: theme.colors.textSecondary }]}>Debt</Text>
-                        <Text style={[styles.gridValue, { color: theme.colors.text }]}>{formatCurrency(debtAmount)}</Text>
-                    </GlassCard>
-
-                    <GlassCard style={styles.gridItem}>
-                        <Ionicons name="calendar-outline" size={24} color={theme.colors.warning} />
-                        <Text style={[styles.gridLabel, { color: theme.colors.textSecondary }]}>Fixed/Mo</Text>
-                        <Text style={[styles.gridValue, { color: theme.colors.text }]}>{formatCurrency(fixedMonthlyCost)}</Text>
-                    </GlassCard>
+                    {[
+                        { icon: 'cash-outline', color: theme.colors.info, label: 'Cash Balance', value: balance },
+                        { icon: 'trending-up', color: theme.colors.primary, label: 'Invested', value: investedAmount },
+                        { icon: 'trending-down', color: theme.colors.error, label: 'Debt', value: debtAmount },
+                        { icon: 'calendar-outline', color: theme.colors.warning, label: 'Fixed/Mo', value: fixedMonthlyCost },
+                    ].map((item, idx) => (
+                        <GlassCard key={idx} style={styles.gridItem}>
+                            <Ionicons name={item.icon as any} size={24} color={item.color} />
+                            <Text style={[styles.gridLabel, { color: theme.colors.textSecondary }]}>{item.label}</Text>
+                            {loading ? <Skeleton width={80} height={18} style={{ marginTop: 4 }} /> : <Text style={[styles.gridValue, { color: theme.colors.text }]}>{formatCurrency(item.value)}</Text>}
+                        </GlassCard>
+                    ))}
                 </View>
 
                 {/* Recent Activity (Mini List) */}
@@ -281,22 +282,26 @@ export const DashboardScreen = () => {
                     </TouchableOpacity>
                 </View>
 
-                {transactions.slice(0, 5).map((t) => (
-                    <GlassCard key={t.id} style={styles.transactionItem}>
-                        <View style={styles.transactionRow}>
-                            <View>
-                                <Text style={[styles.tTitle, { color: theme.colors.text }]}>{t.category}</Text>
-                                <Text style={[styles.tDate, { color: theme.colors.textSecondary }]}>{new Date(t.date).toLocaleDateString()}</Text>
+                {loading ? (
+                    [1, 2, 3].map(i => <Skeleton key={i} height={70} style={{ marginBottom: 10 }} />)
+                ) : (
+                    transactions.slice(0, 5).map((t) => (
+                        <GlassCard key={t.id} style={styles.transactionItem}>
+                            <View style={styles.transactionRow}>
+                                <View>
+                                    <Text style={[styles.tTitle, { color: theme.colors.text }]}>{t.category}</Text>
+                                    <Text style={[styles.tDate, { color: theme.colors.textSecondary }]}>{new Date(t.date).toLocaleDateString()}</Text>
+                                </View>
+                                <Text style={[
+                                    styles.tAmount,
+                                    { color: t.type === 'income' ? theme.colors.success : theme.colors.error }
+                                ]}>
+                                    {t.type === 'income' ? '+' : '-'}{formatCurrency(t.amount)}
+                                </Text>
                             </View>
-                            <Text style={[
-                                styles.tAmount,
-                                { color: t.type === 'income' ? theme.colors.success : theme.colors.error }
-                            ]}>
-                                {t.type === 'income' ? '+' : '-'}{formatCurrency(t.amount)}
-                            </Text>
-                        </View>
-                    </GlassCard>
-                ))}
+                        </GlassCard>
+                    ))
+                )}
 
             </ScrollView>
 

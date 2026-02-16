@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export const IncomeScreen = () => {
     const navigation = useNavigation();
-    const { hideAmounts } = usePrivacy();
+    const { isAmountHidden } = usePrivacy();
     const { theme, isDark } = useTheme();
     const insets = useSafeAreaInsets();
     const [income, setIncome] = useState<Transaction[]>([]);
@@ -107,11 +107,11 @@ export const IncomeScreen = () => {
     };
 
     const handleEditIncome = (transaction: Transaction) => {
-        navigation.navigate('AddIncome' as never, { transaction } as never);
+        (navigation as any).navigate('AddIncome', { transaction });
     };
 
     const formatAmount = (amount: number) => {
-        if (hideAmounts) return '****';
+        if (isAmountHidden) return '****';
         return `${currency}${amount.toLocaleString()}`;
     };
 
@@ -161,11 +161,21 @@ export const IncomeScreen = () => {
 
     const renderEmptyState = () => (
         <View style={styles.emptyState}>
-            <Ionicons name="wallet-outline" size={64} color={theme.colors.textSecondary} />
-            <Text style={[styles.emptyTitle, { color: theme.colors.text }]}>No Income Yet</Text>
+            <View style={[styles.emptyIconContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#f9f9f9' }]}>
+                <Ionicons name="wallet-outline" size={60} color={theme.colors.textSecondary} />
+            </View>
+            <Text style={[styles.emptyTitle, { color: theme.colors.text }]}>No Income Found</Text>
             <Text style={[styles.emptySubtitle, { color: theme.colors.textSecondary }]}>
-                {searchQuery || filters.category || filters.account ? 'Try adjusting your filters' : 'Tap the + button to add your first income'}
+                {searchQuery || filters.category || filters.account ? 'Try adjusting your search or filters to find what you looking for.' : 'Start tracking your earnings by adding your first income.'}
             </Text>
+            {!searchQuery && !filters.category && !filters.account && (
+                <TouchableOpacity
+                    style={[styles.emptyButton, { backgroundColor: theme.colors.success }]}
+                    onPress={handleAddIncome}
+                >
+                    <Text style={styles.emptyButtonText}>Add Income</Text>
+                </TouchableOpacity>
+            )}
         </View>
     );
 
@@ -293,18 +303,39 @@ const styles = StyleSheet.create({
         fontSize: 13,
     },
     emptyState: {
+        padding: 60,
         alignItems: 'center',
-        padding: 40,
+        justifyContent: 'center',
+    },
+    emptyIconContainer: {
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 20,
     },
     emptyTitle: {
         fontSize: 20,
         fontWeight: 'bold',
-        marginTop: 16,
-        marginBottom: 8,
+        marginBottom: 10,
+        textAlign: 'center',
     },
     emptySubtitle: {
-        fontSize: 14,
+        fontSize: 15,
         textAlign: 'center',
+        lineHeight: 22,
+        marginBottom: 24,
+    },
+    emptyButton: {
+        paddingVertical: 12,
+        paddingHorizontal: 24,
+        borderRadius: 25,
+    },
+    emptyButtonText: {
+        color: '#FFF',
+        fontWeight: 'bold',
+        fontSize: 16,
     },
     fab: {
         position: 'absolute',

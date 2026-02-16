@@ -5,6 +5,7 @@ import * as Device from 'expo-device';
 import * as Crypto from 'expo-crypto';
 import { db } from '../database';
 import { smsParser, ParsedTransaction } from '../utils/sms-parser';
+import { settingsService } from './settings.service';
 
 export interface SyncProgress {
   total: number;
@@ -117,6 +118,10 @@ export const smsService = {
       }
 
       const allSms = await smsService.getAllSms();
+      const accountSettings = await settingsService.getAccountSettings();
+      const blockedSenders = accountSettings.blockedSenders.map((s: string) => s.toLowerCase());
+      const blockedKeywords = accountSettings.blockedKeywords.map((k: string) => k.toLowerCase());
+
       let addedCount = 0;
       let processedCount = 0;
       const total = allSms.length;
@@ -134,6 +139,13 @@ export const smsService = {
           if ((processedCount % 5 === 0 || processedCount === total) && onProgress) {
               onProgress({ total, processed: processedCount, added: addedCount });
           }
+
+          // 0. Check Blocklist
+          const sender = sms.address.toLowerCase();
+          const body = sms.body.toLowerCase();
+
+          if (blockedSenders.some((s: string) => sender.includes(s))) continue;
+          if (blockedKeywords.some((k: string) => body.includes(k))) continue;
 
           // 1. Parse SMS
           // Ensure timestamp is valid. Some SMS plugins return 'date' as string string

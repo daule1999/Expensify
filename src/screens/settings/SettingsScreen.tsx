@@ -7,7 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 
-import { settingsService, PrivacySettings, ProfileSettings } from '../../services/settings.service';
+import { settingsService, PrivacySettings, ProfileSettings, NotificationSettings } from '../../services/settings.service';
 import { transactionService } from '../../services/transaction.service';
 import { exportService } from '../../services/export.service';
 import { importService } from '../../services/import.service';
@@ -29,11 +29,13 @@ export const SettingsScreen = () => {
     const { refreshSettings } = usePrivacy();
     const { theme, isDark, toggleTheme } = useTheme();
 
-    const [activeSection, setActiveSection] = useState<'main' | 'privacy' | 'data' | 'automation' | 'about'>('main');
+    const [activeSection, setActiveSection] = useState<'main' | 'privacy' | 'data' | 'automation' | 'about' | 'blocklist'>('main');
 
     // === Global Settings State ===
     const [privacySettings, setPrivacySettings] = useState<PrivacySettings | null>(null);
     const [profileSettings, setProfileSettings] = useState<ProfileSettings | null>(null);
+    const [notificationSettings, setNotificationSettings] = useState<NotificationSettings | null>(null);
+    const [accountSettings, setAccountSettings] = useState<any>(null);
     const [isSyncing, setIsSyncing] = useState(false);
 
     // === Test Runner State ===
@@ -75,8 +77,12 @@ export const SettingsScreen = () => {
     const loadSettings = async () => {
         const privacy = await settingsService.getPrivacySettings();
         const profile = await settingsService.getProfileSettings();
+        const notifications = await settingsService.getNotificationSettings();
+        const accounts = await settingsService.getAccountSettings();
         setPrivacySettings(privacy);
         setProfileSettings(profile);
+        setNotificationSettings(notifications);
+        setAccountSettings(accounts);
     };
 
     const loadClientIds = async () => {
@@ -121,6 +127,13 @@ export const SettingsScreen = () => {
         setPrivacySettings(updated);
         await settingsService.savePrivacySettings(updated);
         await refreshSettings();
+    };
+
+    const handleUpdateNotifications = async (field: keyof NotificationSettings, value: boolean) => {
+        if (!notificationSettings) return;
+        const updated = { ...notificationSettings, [field]: value };
+        setNotificationSettings(updated);
+        await settingsService.saveNotificationSettings(updated);
     };
 
     const handleExport = async () => {
@@ -239,6 +252,73 @@ export const SettingsScreen = () => {
                         trackColor={{ true: theme.colors.primary, false: theme.colors.border }}
                     />
                 </View>
+                <View style={styles.divider} />
+                <View style={styles.settingRow}>
+                    <Text style={{ color: theme.colors.text, flex: 1 }}>Require Lock on Startup</Text>
+                    <Switch
+                        value={privacySettings?.requireLockOnStartup}
+                        onValueChange={(v) => {
+                            if (privacySettings) {
+                                const updated = { ...privacySettings, requireLockOnStartup: v };
+                                setPrivacySettings(updated);
+                                settingsService.savePrivacySettings(updated);
+                            }
+                        }}
+                        trackColor={{ true: theme.colors.primary, false: theme.colors.border }}
+                    />
+                </View>
+            </GlassCard>
+        </View>
+    );
+
+    const renderNotificationSection = () => (
+        <View>
+            <TouchableOpacity onPress={() => setActiveSection('main')} style={styles.backButton}>
+                <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
+                <Text style={[styles.backText, { color: theme.colors.text }]}>Back to Settings</Text>
+            </TouchableOpacity>
+
+            <Text style={[styles.sectionHeader, { color: theme.colors.text }]}>Notifications</Text>
+            <GlassCard style={styles.card}>
+                <View style={styles.settingRow}>
+                    <Text style={{ color: theme.colors.text, flex: 1 }}>Enable Notifications</Text>
+                    <Switch
+                        value={notificationSettings?.enabled}
+                        onValueChange={(v) => handleUpdateNotifications('enabled', v)}
+                        trackColor={{ true: theme.colors.primary, false: theme.colors.border }}
+                    />
+                </View>
+                {notificationSettings?.enabled && (
+                    <>
+                        <View style={styles.divider} />
+                        <View style={styles.settingRow}>
+                            <Text style={{ color: theme.colors.text, flex: 1, marginLeft: 16 }}>Subscription Reminders</Text>
+                            <Switch
+                                value={notificationSettings?.upcomingSubscription}
+                                onValueChange={(v) => handleUpdateNotifications('upcomingSubscription', v)}
+                                trackColor={{ true: theme.colors.primary, false: theme.colors.border }}
+                            />
+                        </View>
+                        <View style={styles.divider} />
+                        <View style={styles.settingRow}>
+                            <Text style={{ color: theme.colors.text, flex: 1, marginLeft: 16 }}>EMI Reminders</Text>
+                            <Switch
+                                value={notificationSettings?.emiReminders}
+                                onValueChange={(v) => handleUpdateNotifications('emiReminders', v)}
+                                trackColor={{ true: theme.colors.primary, false: theme.colors.border }}
+                            />
+                        </View>
+                        <View style={styles.divider} />
+                        <View style={styles.settingRow}>
+                            <Text style={{ color: theme.colors.text, flex: 1, marginLeft: 16 }}>Budget Alerts</Text>
+                            <Switch
+                                value={notificationSettings?.budgetAlerts}
+                                onValueChange={(v) => handleUpdateNotifications('budgetAlerts', v)}
+                                trackColor={{ true: theme.colors.primary, false: theme.colors.border }}
+                            />
+                        </View>
+                    </>
+                )}
             </GlassCard>
         </View>
     );
@@ -273,6 +353,92 @@ export const SettingsScreen = () => {
                 <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginTop: 8, textAlign: 'center' }}>
                     Tests database integrity, encryption, and SMS logic.
                 </Text>
+            </GlassCard>
+        </View>
+    );
+
+    const renderBlocklistSection = () => (
+        <View>
+            <TouchableOpacity onPress={() => setActiveSection('main')} style={styles.backButton}>
+                <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
+                <Text style={[styles.backText, { color: theme.colors.text }]}>Back to Settings</Text>
+            </TouchableOpacity>
+
+            <Text style={[styles.sectionHeader, { color: theme.colors.text }]}>SMS Blocklist</Text>
+            <Text style={{ color: theme.colors.textSecondary, marginBottom: 16 }}>
+                Messages from these addresses or containing these keywords will be ignored during sync.
+            </Text>
+
+            <Text style={[styles.sectionTitle, { color: theme.colors.text, fontSize: 12 }]}>Blocked Senders</Text>
+            <GlassCard style={[styles.card, { marginBottom: 20 }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <View style={{ flex: 1 }}>
+                        <GlassInput
+                            placeholder="Add Sender (e.g. ZYPE, BFL)"
+                            style={{ height: 40 }}
+                            onSubmitEditing={(e) => {
+                                const val = e.nativeEvent.text.trim();
+                                if (val && accountSettings) {
+                                    const updated = { ...accountSettings, blockedSenders: [...accountSettings.blockedSenders, val] };
+                                    setAccountSettings(updated);
+                                    settingsService.saveAccountSettings(updated);
+                                }
+                            }}
+                        />
+                    </View>
+                </View>
+                <View style={{ marginTop: 10, flexDirection: 'row', flexWrap: 'wrap' }}>
+                    {accountSettings?.blockedSenders?.map((sender: string, i: number) => (
+                        <TouchableOpacity
+                            key={i}
+                            style={styles.chip}
+                            onPress={() => {
+                                const updated = { ...accountSettings, blockedSenders: accountSettings.blockedSenders.filter((_: any, idx: number) => idx !== i) };
+                                setAccountSettings(updated);
+                                settingsService.saveAccountSettings(updated);
+                            }}
+                        >
+                            <Text style={{ color: theme.colors.text, marginRight: 4 }}>{sender}</Text>
+                            <Ionicons name="close-circle" size={16} color={theme.colors.error} />
+                        </TouchableOpacity>
+                    ))}
+                </View>
+            </GlassCard>
+
+            <Text style={[styles.sectionTitle, { color: theme.colors.text, fontSize: 12 }]}>Blocked Keywords</Text>
+            <GlassCard style={styles.card}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <View style={{ flex: 1 }}>
+                        <GlassInput
+                            placeholder="Add Keyword (e.g. loan, offer)"
+                            style={{ height: 40 }}
+                            onSubmitEditing={(e) => {
+                                const val = e.nativeEvent.text.trim().toLowerCase();
+                                if (val && accountSettings) {
+                                    const updated = { ...accountSettings, blockedKeywords: [...accountSettings.blockedKeywords, val] };
+                                    setAccountSettings(updated);
+                                    settingsService.saveAccountSettings(updated);
+                                }
+                            }}
+                        />
+                    </View>
+                </View>
+                <View style={{ marginTop: 10, flexDirection: 'row', flexWrap: 'wrap' }}>
+                    {accountSettings?.blockedKeywords?.map((kw: string, i: number) => (
+                        <TouchableOpacity
+                            key={i}
+                            style={styles.chip}
+                            onPress={() => {
+                                const updated = { ...accountSettings, blockedKeywords: accountSettings.blockedKeywords.filter((_: any, idx: number) => idx !== i) };
+                                setAccountSettings(updated);
+                                settingsService.saveAccountSettings(updated);
+                            }}
+                        >
+                            <Text style={{ color: theme.colors.text, marginRight: 4 }}>{kw}</Text>
+                            <Ionicons name="close-circle" size={16} color={theme.colors.error} />
+                        </TouchableOpacity>
+                    ))}
+                </View>
             </GlassCard>
         </View>
     );
@@ -325,7 +491,11 @@ export const SettingsScreen = () => {
                                 finally { setIsSyncing(false); }
                             })}
                             <View style={styles.divider} />
+                            {renderMenuItem('close-circle-outline', 'SMS Blocklist', 'Manage blocked senders', () => setActiveSection('blocklist'))}
+                            <View style={styles.divider} />
                             {renderMenuItem('repeat-outline', 'Recurring', 'Auto-create transactions', () => navigation.navigate('Recurring' as never))}
+                            <View style={styles.divider} />
+                            {renderMenuItem('notifications-outline', 'Notifications', 'Reminders & Alerts', () => setActiveSection('automation' as any))}
                         </GlassCard>
 
                         <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Other</Text>
@@ -336,7 +506,9 @@ export const SettingsScreen = () => {
                 )}
 
                 {activeSection === 'privacy' && renderPrivacySection()}
+                {activeSection === 'automation' && renderNotificationSection()}
                 {activeSection === 'about' && renderAboutSection()}
+                {activeSection === 'blocklist' && renderBlocklistSection()}
 
                 {/* Backup Config Modal (Simplified) */}
                 <Modal visible={showConfigModal} transparent animationType="fade" onRequestClose={() => setShowConfigModal(false)}>
@@ -417,4 +589,14 @@ const styles = StyleSheet.create({
     modalButton: { backgroundColor: '#2196F3', padding: 14, borderRadius: 12, alignItems: 'center' },
     testResultRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(150,150,150,0.1)' },
     testName: { fontSize: 16, fontWeight: '500' },
+    chip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 20,
+        backgroundColor: 'rgba(150,150,150,0.1)',
+        marginRight: 8,
+        marginBottom: 8,
+    },
 });

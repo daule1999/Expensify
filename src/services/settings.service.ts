@@ -22,11 +22,18 @@ export interface IncomeSettings {
   defaultSources: string[];
   customFields: CustomField[];
 }
-
 export interface PrivacySettings {
   hideAmounts: boolean;
   requirePasswordToUnhide: boolean;
   useBiometric: boolean; // Use fingerprint/face ID instead of password
+  requireLockOnStartup: boolean; // Force unlock screen on app boot
+}
+
+export interface NotificationSettings {
+  enabled: boolean;
+  upcomingSubscription: boolean;
+  emiReminders: boolean;
+  budgetAlerts: boolean;
 }
 
 export interface ProfileSettings {
@@ -41,6 +48,8 @@ export interface AccountSettings {
   defaultAccount: string; // Default account for new transactions
   bankAccounts: BankAccount[]; // Structured bank accounts with last 4 digits
   customBankIdentifiers: string[]; // User-added SMS sender identifiers
+  blockedSenders: string[]; // SMS addresses to ignore entirely
+  blockedKeywords: string[]; // Keywords that trigger ignoring a message
 }
 
 export interface BankAccount {
@@ -63,11 +72,18 @@ const DEFAULT_INCOME_SETTINGS: IncomeSettings = {
   defaultSources: ['Salary', 'Business', 'Freelance', 'Investment', 'Gift', 'Other'],
   customFields: []
 };
-
 const DEFAULT_PRIVACY_SETTINGS: PrivacySettings = {
   hideAmounts: false,
   requirePasswordToUnhide: false,
-  useBiometric: false
+  useBiometric: false,
+  requireLockOnStartup: false
+};
+
+const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
+  enabled: true,
+  upcomingSubscription: true,
+  emiReminders: true,
+  budgetAlerts: true
 };
 
 const DEFAULT_PROFILE_SETTINGS: ProfileSettings = {
@@ -82,6 +98,8 @@ const DEFAULT_ACCOUNT_SETTINGS: AccountSettings = {
   defaultAccount: 'Cash',
   bankAccounts: [],
   customBankIdentifiers: [],
+  blockedSenders: [],
+  blockedKeywords: ['loan', 'approved', 'pre-approved', 'offer', 'voucher', 'points'],
 };
 
 const EXPENSE_SETTINGS_KEY = '@expense_settings';
@@ -89,6 +107,7 @@ const INCOME_SETTINGS_KEY = '@income_settings';
 const PRIVACY_SETTINGS_KEY = '@privacy_settings';
 const PROFILE_SETTINGS_KEY = '@profile_settings';
 const ACCOUNT_SETTINGS_KEY = '@account_settings';
+const NOTIFICATION_SETTINGS_KEY = '@notification_settings';
 
 export const settingsService = {
   // Expense Settings
@@ -263,5 +282,25 @@ export const settingsService = {
     const cleaned = last4.replace(/[xX]/g, '');
     const match = (settings.bankAccounts || []).find(ba => ba.last4 === cleaned);
     return match ? match.name : null;
+  },
+
+  // Notification Settings
+  getNotificationSettings: async (): Promise<NotificationSettings> => {
+    try {
+      const data = await AsyncStorage.getItem(NOTIFICATION_SETTINGS_KEY);
+      return data ? JSON.parse(data) : DEFAULT_NOTIFICATION_SETTINGS;
+    } catch (error) {
+      console.error('Failed to load notification settings:', error);
+      return DEFAULT_NOTIFICATION_SETTINGS;
+    }
+  },
+
+  saveNotificationSettings: async (settings: NotificationSettings): Promise<void> => {
+    try {
+      await AsyncStorage.setItem(NOTIFICATION_SETTINGS_KEY, JSON.stringify(settings));
+    } catch (error) {
+      console.error('Failed to save notification settings:', error);
+      throw error;
+    }
   },
 };
