@@ -1,9 +1,7 @@
-name: Build Android APK
+name: Build Android APK (Local)
 
+# Manual trigger only — no auto-build on push
 on:
-  push:
-    branches:
-      - master
   workflow_dispatch:
 
 permissions:
@@ -15,8 +13,6 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v3
@@ -24,31 +20,28 @@ jobs:
           node-version: 20.x
           cache: npm
 
-      - name: Setup EAS
-        uses: expo/expo-github-action@v8
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
         with:
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
-          packager: npm
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Android Preview APK
-        id: build
-        run: |
-          eas build --profile preview --platform android --non-interactive --json > build.json
-          cat build.json
+      - name: Generate native Android project
+        run: npx expo prebuild --platform android --clean --no-install
 
-      - name: Download APK
+      - name: Build APK with Gradle
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Move APK to root
         run: |
-          URL=$(jq -r '.[0].artifacts.buildUrl' build.json)
-          if [ "$URL" == "null" ]; then
-            echo "Error: Could not find build URL"
-            exit 1
-          fi
-          echo "Downloading from $URL"
-          curl -L -o expensify-preview.apk "$URL"
+          find android -name "*.apk" -path "*/release/*" | head -1 | xargs -I{} cp {} expensify-preview.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
@@ -67,7 +60,7 @@ jobs:
           tag_name: latest-preview
           name: "Preview Build (${{ steps.date.outputs.date }})"
           body: |
-            🤖 Automated preview build from `master` branch.
+            🤖 Automated preview build — no Expo/EAS account needed.
             Built on: ${{ steps.date.outputs.date }} UTC
           files: expensify-preview.apk
           prerelease: true
