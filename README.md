@@ -10,7 +10,7 @@ Expensify is a privacy-first, feature-rich personal finance manager built with R
 | Link | Description |
 |------|-------------|
 | [**Latest Release (APK)**](https://github.com/daule1999/Expensify/releases/tag/latest-preview) | Download the latest preview build |
-| [**Latest Build Artifact**](https://github.com/daule1999/Expensify/actions/workflows/android-release.yml) | Direct artifact download |
+| [**Latest Build Artifact**](https://github.com/daule1999/Expensify/actions/runs/22103616120/artifacts/5541074384) | Direct artifact download (Build 2026-02-17 15:23) |
 | [**All CI Builds**](https://github.com/daule1999/Expensify/actions/workflows/android-release.yml) | All build runs |
 <!-- BUILD_LINKS_END -->
 
