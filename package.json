@@ -14,6 +14,9 @@
     "build:dev:ios": "eas build --profile development --platform ios",
     "build:preview": "eas build --profile preview",
     "properties": "npx expo install expo-build-properties",
+    "test": "node scripts/automation_test.js",
+    "test:ui": "node scripts/ui_automation_test.js",
+    "test:all": "node scripts/automation_test.js && node scripts/ui_automation_test.js",
     "postinstall": "patch-package"
   },
   "dependencies": {

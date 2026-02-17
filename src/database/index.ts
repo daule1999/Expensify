@@ -304,6 +304,22 @@ export const initializeDatabase = async () => {
       );
     `);
 
+    // Create goals table
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS goals (
+        id TEXT PRIMARY KEY NOT NULL,
+        name TEXT NOT NULL,
+        target_amount REAL NOT NULL,
+        saved_amount REAL DEFAULT 0,
+        deadline INTEGER,
+        icon TEXT,
+        color TEXT,
+        status TEXT DEFAULT 'active',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+    `);
+
   } catch (error) {
     console.error('Error initializing database:', error);
     throw error;

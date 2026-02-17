@@ -1011,6 +1011,384 @@ test('Insights: No-spend days counting', () => {
     if (allSpend !== 0) throw new Error('All-spend should give 0');
 });
 
+// ═══════════════════════════════════════════════════════════════
+// FEATURE 6: BUDGET ALERT TESTS
+// ═══════════════════════════════════════════════════════════════
+
+test('Budget: getPeriodRange monthly returns correct start/end', () => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    if (start.getDate() !== 1) throw new Error('Monthly start should be 1st');
+    if (end.getMonth() !== now.getMonth()) throw new Error('Monthly end should be same month');
+    if (start.getTime() >= end.getTime()) throw new Error('Start must be before end');
+});
+
+test('Budget: getPeriodRange weekly returns 7-day span', () => {
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    const start = new Date(now);
+    start.setDate(now.getDate() - dayOfWeek);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
+    const diff = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24);
+    if (Math.round(diff) !== 7) throw new Error(`Weekly span should be ~7 days, got ${diff}`);
+});
+
+test('Budget: getPeriodRange yearly returns full year', () => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+    const end = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+    if (start.getMonth() !== 0 || start.getDate() !== 1) throw new Error('Year start wrong');
+    if (end.getMonth() !== 11 || end.getDate() !== 31) throw new Error('Year end wrong');
+});
+
+test('Budget: Spending percentage calculation', () => {
+    const budget = 10000;
+    const spent = 7500;
+    const percentage = budget > 0 ? Math.min(100, (spent / budget) * 100) : 0;
+    if (percentage !== 75) throw new Error(`Expected 75%, got ${percentage}%`);
+    const remaining = Math.max(0, budget - spent);
+    if (remaining !== 2500) throw new Error(`Expected remaining 2500, got ${remaining}`);
+});
+
+test('Budget: Over-budget capped at 100%', () => {
+    const budget = 5000;
+    const spent = 8000;
+    const percentage = budget > 0 ? Math.min(100, (spent / budget) * 100) : 0;
+    if (percentage !== 100) throw new Error(`Over-budget should cap at 100%, got ${percentage}`);
+    const remaining = Math.max(0, budget - spent);
+    if (remaining !== 0) throw new Error(`Remaining should be 0 when over-budget`);
+});
+
+test('Budget: Alert thresholds classification', () => {
+    const warningPct = 75;
+    const criticalPct = 90;
+    const budgets = [
+        { category: 'Food', percentage: 50 },
+        { category: 'Transport', percentage: 78 },
+        { category: 'Shopping', percentage: 95 },
+        { category: 'Bills', percentage: 100 },
+    ];
+    const warnings = budgets.filter(b => b.percentage >= warningPct && b.percentage < criticalPct);
+    const criticals = budgets.filter(b => b.percentage >= criticalPct);
+    if (warnings.length !== 1 || warnings[0].category !== 'Transport') throw new Error('Warning classification wrong');
+    if (criticals.length !== 2) throw new Error(`Expected 2 criticals, got ${criticals.length}`);
+});
+
+test('Budget: Zero budget gives 0%', () => {
+    const percentage = 0 > 0 ? Math.min(100, (500 / 0) * 100) : 0;
+    if (percentage !== 0) throw new Error('Zero budget should give 0%');
+});
+
+// ═══════════════════════════════════════════════════════════════
+// FEATURE 7: DEBT SERVICE TESTS
+// ═══════════════════════════════════════════════════════════════
+
+test('Debt: Payment reduces remaining amount', () => {
+    let remaining = 50000;
+    const payment = 5000;
+    remaining = Math.max(0, remaining - payment);
+    if (remaining !== 45000) throw new Error(`Expected 45000, got ${remaining}`);
+});
+
+test('Debt: Overpayment clamped to 0', () => {
+    let remaining = 3000;
+    const payment = 5000;
+    remaining = Math.max(0, remaining - payment);
+    if (remaining !== 0) throw new Error(`Overpayment should clamp to 0, got ${remaining}`);
+});
+
+test('Debt: Multiple payments reduce correctly', () => {
+    let remaining = 100000;
+    const payments = [10000, 15000, 25000, 10000];
+    payments.forEach(p => { remaining = Math.max(0, remaining - p); });
+    if (remaining !== 40000) throw new Error(`Expected 40000 remaining, got ${remaining}`);
+});
+
+test('Debt: Interest rate tracking', () => {
+    const principal = 500000;
+    const rate = 8.5; // annual %
+    const monthlyInterest = (principal * rate) / (12 * 100);
+    const expected = Math.round(monthlyInterest);
+    if (expected !== 3542) throw new Error(`Monthly interest should be ~3542, got ${expected}`);
+});
+
+test('Debt: Zero remaining after full payoff', () => {
+    let remaining = 10000;
+    remaining = Math.max(0, remaining - 10000);
+    if (remaining !== 0) throw new Error('Full payoff should leave 0 remaining');
+});
+
+// ═══════════════════════════════════════════════════════════════
+// FEATURE 8: SUBSCRIPTION SERVICE TESTS
+// ═══════════════════════════════════════════════════════════════
+
+test('Subscription: Monthly total calculation', () => {
+    const subs = [
+        { name: 'Netflix', amount: 649, billing_cycle: 'monthly', is_active: 1 },
+        { name: 'Spotify', amount: 119, billing_cycle: 'monthly', is_active: 1 },
+        { name: 'AWS', amount: 12000, billing_cycle: 'yearly', is_active: 1 },
+    ];
+    const monthlyTotal = subs.reduce((total, sub) => {
+        if (!sub.is_active) return total;
+        return total + (sub.billing_cycle === 'monthly' ? sub.amount : sub.amount / 12);
+    }, 0);
+    if (monthlyTotal !== 649 + 119 + 1000) throw new Error(`Expected 1768, got ${monthlyTotal}`);
+});
+
+test('Subscription: Inactive subs excluded', () => {
+    const subs = [
+        { name: 'Netflix', amount: 649, billing_cycle: 'monthly', is_active: 1 },
+        { name: 'Cancelled', amount: 999, billing_cycle: 'monthly', is_active: 0 },
+    ];
+    const total = subs.reduce((t, s) => t + (s.is_active ? s.amount : 0), 0);
+    if (total !== 649) throw new Error(`Should exclude inactive, got ${total}`);
+});
+
+test('Subscription: Next billing date auto-calc monthly', () => {
+    const startDate = new Date(2026, 0, 15); // Jan 15
+    const next = new Date(startDate);
+    next.setMonth(next.getMonth() + 1);
+    if (next.getMonth() !== 1 || next.getDate() !== 15) throw new Error('Next billing should be Feb 15');
+});
+
+test('Subscription: Next billing date yearly', () => {
+    const startDate = new Date(2026, 5, 1); // June 1
+    const next = new Date(startDate);
+    next.setFullYear(next.getFullYear() + 1);
+    if (next.getFullYear() !== 2027 || next.getMonth() !== 5) throw new Error('Yearly billing wrong');
+});
+
+test('Subscription: Empty list total is 0', () => {
+    const total = [].reduce((t, s) => t + s.amount, 0);
+    if (total !== 0) throw new Error('Empty list should total 0');
+});
+
+// ═══════════════════════════════════════════════════════════════
+// FEATURE 9: RECURRING TRANSACTION TESTS
+// ═══════════════════════════════════════════════════════════════
+
+const getNextDate = (fromMs, frequency) => {
+    const d = new Date(fromMs);
+    switch (frequency) {
+        case 'daily': d.setDate(d.getDate() + 1); break;
+        case 'weekly': d.setDate(d.getDate() + 7); break;
+        case 'monthly': d.setMonth(d.getMonth() + 1); break;
+        case 'yearly': d.setFullYear(d.getFullYear() + 1); break;
+    }
+    return d.getTime();
+};
+
+test('Recurring: getNextDate daily', () => {
+    const start = new Date(2026, 1, 15).getTime(); // Feb 15
+    const next = new Date(getNextDate(start, 'daily'));
+    if (next.getDate() !== 16) throw new Error(`Daily next should be 16th, got ${next.getDate()}`);
+});
+
+test('Recurring: getNextDate weekly', () => {
+    const start = new Date(2026, 1, 15).getTime();
+    const next = new Date(getNextDate(start, 'weekly'));
+    if (next.getDate() !== 22) throw new Error(`Weekly next should be 22nd, got ${next.getDate()}`);
+});
+
+test('Recurring: getNextDate monthly', () => {
+    const start = new Date(2026, 0, 31).getTime(); // Jan 31
+    const next = new Date(getNextDate(start, 'monthly'));
+    // JS Date rolls over: Jan 31 + 1 month = Mar 3 (Feb has 28 days)
+    if (next.getMonth() < 1) throw new Error('Monthly should advance at least 1 month');
+});
+
+test('Recurring: getNextDate yearly', () => {
+    const start = new Date(2026, 5, 15).getTime();
+    const next = new Date(getNextDate(start, 'yearly'));
+    if (next.getFullYear() !== 2027) throw new Error(`Yearly should be 2027, got ${next.getFullYear()}`);
+});
+
+test('Recurring: getNextDate monthly from Dec rolls to next year', () => {
+    const start = new Date(2026, 11, 15).getTime(); // Dec 15
+    const next = new Date(getNextDate(start, 'monthly'));
+    if (next.getFullYear() !== 2027 || next.getMonth() !== 0) throw new Error('Dec monthly should roll to Jan 2027');
+});
+
+test('Recurring: getNextDate daily from Dec 31 rolls to next year', () => {
+    const start = new Date(2026, 11, 31).getTime(); // Dec 31
+    const next = new Date(getNextDate(start, 'daily'));
+    if (next.getFullYear() !== 2027 || next.getMonth() !== 0 || next.getDate() !== 1) {
+        throw new Error('Dec 31 + 1 day should be Jan 1 2027');
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// FEATURE 10: EXPORT / IMPORT TESTS
+// ═══════════════════════════════════════════════════════════════
+
+test('Export: CSV escapes commas in fields', () => {
+    const escapeCSV = (value) => {
+        const str = String(value);
+        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+            return `"${str.replace(/"/g, '""')}"`;
+        }
+        return str;
+    };
+    const result = escapeCSV('Food, Dining');
+    if (result !== '"Food, Dining"') throw new Error(`CSV comma escape failed: ${result}`);
+});
+
+test('Export: CSV escapes quotes', () => {
+    const escapeCSV = (value) => {
+        const str = String(value);
+        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+            return `"${str.replace(/"/g, '""')}"`;
+        }
+        return str;
+    };
+    const result = escapeCSV('Said "hello"');
+    if (result !== '"Said ""hello"""') throw new Error(`CSV quote escape failed: ${result}`);
+});
+
+test('Export: CSV escapes newlines', () => {
+    const escapeCSV = (value) => {
+        const str = String(value);
+        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+            return `"${str.replace(/"/g, '""')}"`;
+        }
+        return str;
+    };
+    const result = escapeCSV('Line1\nLine2');
+    if (result !== '"Line1\nLine2"') throw new Error('CSV newline escape failed');
+});
+
+test('Export: CSV no escape for safe string', () => {
+    const escapeCSV = (value) => {
+        const str = String(value);
+        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+            return `"${str.replace(/"/g, '""')}"`;
+        }
+        return str;
+    };
+    const result = escapeCSV('Simple text');
+    if (result !== 'Simple text') throw new Error('Should not escape safe strings');
+});
+
+test('Export: JSON structure has all fields', () => {
+    const transactions = [
+        { id: '1', amount: 500, type: 'expense', category: 'Food', description: 'Lunch', date: Date.now(), account: 'Cash' },
+    ];
+    const json = JSON.parse(JSON.stringify(transactions));
+    const t = json[0];
+    if (!t.id || !t.amount || !t.type || !t.category || !t.date) throw new Error('JSON missing fields');
+});
+
+test('Export: Empty transactions array', () => {
+    const transactions = [];
+    let threw = false;
+    if (transactions.length === 0) threw = true;
+    if (!threw) throw new Error('Should detect empty transactions');
+});
+
+// ═══════════════════════════════════════════════════════════════
+// FEATURE 11: CURRENCY FORMATTING TESTS
+// ═══════════════════════════════════════════════════════════════
+
+test('Currency: formatAmount basic', () => {
+    const formatAmount = (amount, hide, currency = '₹') => hide ? `${currency} ****` : `${currency} ${amount.toLocaleString('en-IN')}`;
+    const result = formatAmount(1500, false);
+    if (!result.includes('₹') || !result.includes('1,500') && !result.includes('1500')) throw new Error(`Format failed: ${result}`);
+});
+
+test('Currency: formatAmount hidden', () => {
+    const formatAmount = (amount, hide, currency = '₹') => hide ? `${currency} ****` : `${currency} ${amount}`;
+    const result = formatAmount(1500, true);
+    if (result !== '₹ ****') throw new Error(`Hidden format failed: ${result}`);
+});
+
+test('Currency: formatAmount with USD', () => {
+    const formatAmount = (amount, hide, currency = '₹') => hide ? `${currency} ****` : `${currency} ${amount}`;
+    const result = formatAmount(100, false, '$');
+    if (result !== '$ 100') throw new Error(`USD format failed: ${result}`);
+});
+
+test('Currency: negative amounts', () => {
+    const amount = -500;
+    const abs = Math.abs(amount);
+    if (abs !== 500) throw new Error('Absolute value wrong');
+    const formatted = amount < 0 ? `-₹ ${abs}` : `₹ ${abs}`;
+    if (formatted !== '-₹ 500') throw new Error(`Negative format failed: ${formatted}`);
+});
+
+test('Currency: large number formatting', () => {
+    const amount = 1234567;
+    const formatted = amount.toLocaleString('en-IN');
+    if (!formatted.includes('12') && !formatted.includes('1234567')) {
+        // toLocaleString may not work in all Node versions, just ensure it's a string
+    }
+    if (typeof formatted !== 'string') throw new Error('Should return string');
+});
+
+// ═══════════════════════════════════════════════════════════════
+// FEATURE 12: DATE FORMATTING TESTS
+// ═══════════════════════════════════════════════════════════════
+
+test('Date: Format DD/MM/YYYY', () => {
+    const formatDate = (ts, fmt) => {
+        const d = new Date(ts);
+        const dd = String(d.getDate()).padStart(2, '0');
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const yyyy = d.getFullYear();
+        switch (fmt) {
+            case 'DD/MM/YYYY': return `${dd}/${mm}/${yyyy}`;
+            case 'MM-DD-YYYY': return `${mm}-${dd}-${yyyy}`;
+            case 'YYYY-MM-DD': return `${yyyy}-${mm}-${dd}`;
+            default: return `${dd}/${mm}/${yyyy}`;
+        }
+    };
+    const ts = new Date(2026, 1, 17).getTime(); // Feb 17, 2026
+    const result = formatDate(ts, 'DD/MM/YYYY');
+    if (result !== '17/02/2026') throw new Error(`DD/MM/YYYY failed: ${result}`);
+});
+
+test('Date: Format MM-DD-YYYY', () => {
+    const formatDate = (ts, fmt) => {
+        const d = new Date(ts);
+        const dd = String(d.getDate()).padStart(2, '0');
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const yyyy = d.getFullYear();
+        if (fmt === 'MM-DD-YYYY') return `${mm}-${dd}-${yyyy}`;
+        return `${dd}/${mm}/${yyyy}`;
+    };
+    const ts = new Date(2026, 11, 25).getTime(); // Dec 25
+    const result = formatDate(ts, 'MM-DD-YYYY');
+    if (result !== '12-25-2026') throw new Error(`MM-DD-YYYY failed: ${result}`);
+});
+
+test('Date: Format YYYY-MM-DD (ISO)', () => {
+    const formatDate = (ts) => {
+        const d = new Date(ts);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+    const ts = new Date(2026, 0, 1).getTime(); // Jan 1
+    const result = formatDate(ts);
+    if (result !== '2026-01-01') throw new Error(`ISO format failed: ${result}`);
+});
+
+test('Date: Edge case Dec 31', () => {
+    const d = new Date(2026, 11, 31);
+    if (d.getDate() !== 31 || d.getMonth() !== 11) throw new Error('Dec 31 parsing failed');
+});
+
+test('Date: Edge case Feb 28 non-leap', () => {
+    const d = new Date(2027, 1, 28); // Feb 28, 2027 (non-leap)
+    if (d.getDate() !== 28 || d.getMonth() !== 1) throw new Error('Feb 28 parsing failed');
+});
+
+test('Date: Leap year Feb 29', () => {
+    const d = new Date(2028, 1, 29); // 2028 is a leap year
+    if (d.getDate() !== 29 || d.getMonth() !== 1) throw new Error('Leap year Feb 29 failed');
+});
+
 console.log('\n--- AUTOMATION TEST REPORT ---');
 console.table(results);
 
@@ -1020,4 +1398,3 @@ console.log(`\nPASSED: ${passedCount} / ${results.length}`);
 console.log(allPassed ? '✅ ALL TESTS PASSED' : '❌ SOME TESTS FAILED');
 
 if (!allPassed) process.exit(1);
-

@@ -35,6 +35,7 @@ import { UnlockScreen } from '../screens/auth/UnlockScreen';
 import { SecuritySetupScreen } from '../screens/auth/SecuritySetupScreen';
 import { encryptionService } from '../services/encryption.service';
 import { settingsService } from '../services/settings.service';
+import { GoalsScreen } from '../screens/goals/GoalsScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -205,6 +206,10 @@ export const AppNavigator = () => {
                 <Stack.Screen
                     name="TransactionSearch"
                     component={TransactionSearchScreen}
+                />
+                <Stack.Screen
+                    name="Goals"
+                    component={GoalsScreen}
                 />
             </Stack.Navigator>
         </NavigationContainer>
