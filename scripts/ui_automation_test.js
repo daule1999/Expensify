@@ -768,6 +768,97 @@ test('Stats: Total style properties analyzed', () => {
 // REPORT
 // ═══════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════
+// GROUP 14: Z-INDEX VALIDATION
+// ═══════════════════════════════════════════════════════════════
+
+test('Z-Index: Values are integers', () => {
+    const errors = [];
+    allFileStyles.forEach(({ fileName, styles }) => {
+        Object.entries(styles).forEach(([name, props]) => {
+            if (props.zIndex !== undefined) {
+                const val = parseFloat(props.zIndex);
+                if (!Number.isInteger(val)) {
+                    errors.push(`${fileName}.${name}.zIndex = ${val} (not an integer)`);
+                }
+            }
+        });
+    });
+    totalChecks++;
+    if (errors.length > 0) throw new Error(`Non-integer zIndex:\n  ${errors.join('\n  ')}`);
+});
+
+test('Z-Index: No excessive zIndex (> 1000)', () => {
+    const excessive = [];
+    allFileStyles.forEach(({ fileName, styles }) => {
+        Object.entries(styles).forEach(([name, props]) => {
+            if (props.zIndex !== undefined) {
+                const val = parseFloat(props.zIndex);
+                if (val > 1000) {
+                    excessive.push(`${fileName}.${name}.zIndex = ${val}`);
+                }
+            }
+        });
+    });
+    totalChecks++;
+    if (excessive.length > 0) {
+        console.log(`  ⚠️  High zIndex values (> 1000): ${excessive.join(', ')}`);
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// GROUP 15: SPACING CONSISTENCY (4px Grid)
+// ═══════════════════════════════════════════════════════════════
+
+test('Spacing: Margins and Paddings follow 4px grid', () => {
+    const spacerProps = [
+        'margin', 'marginTop', 'marginBottom', 'marginLeft', 'marginRight',
+        'padding', 'paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight'
+    ];
+    const offGrid = [];
+    allFileStyles.forEach(({ fileName, styles }) => {
+        Object.entries(styles).forEach(([name, props]) => {
+            spacerProps.forEach(p => {
+                if (props[p] !== undefined) {
+                    const val = parseFloat(props[p]);
+                    // Check if it's a number and not a multiple of 4
+                    if (!isNaN(val) && val !== 0 && val % 4 !== 0) {
+                        offGrid.push(`${fileName}.${name}.${p} = ${val}`);
+                    }
+                }
+            });
+        });
+    });
+    totalChecks++;
+    if (offGrid.length > 0) {
+        console.log(`  ℹ️  ${offGrid.length} spacing values not on 4px grid (info only)`);
+        // console.log(`     Values: ${offGrid.slice(0, 10).join(', ')}...`);
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// GROUP 16: FONT FAMILY VALIDATION
+// ═══════════════════════════════════════════════════════════════
+
+test('FontFamily: Detect hardcoded font families', () => {
+    const hardcodedFonts = [];
+    allFileStyles.forEach(({ fileName, styles }) => {
+        Object.entries(styles).forEach(([name, props]) => {
+            if (props.fontFamily !== undefined) {
+                hardcodedFonts.push(`${fileName}.${name}.fontFamily = "${props.fontFamily}"`);
+            }
+        });
+    });
+    totalChecks++;
+    if (hardcodedFonts.length > 0) {
+        console.log(`  ℹ️  Found ${hardcodedFonts.length} hardcoded fontFamily definitions`);
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// REPORT
+// ═══════════════════════════════════════════════════════════════
+
 console.log('\n--- UI/CSS AUTOMATION TEST REPORT ---');
 console.table(results);
 

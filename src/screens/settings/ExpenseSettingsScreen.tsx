@@ -12,7 +12,6 @@ export const ExpenseSettingsScreen = () => {
     const { theme } = useTheme();
     const [settings, setSettings] = useState<ExpenseSettings | null>(null);
     const [categoryLabel, setCategoryLabel] = useState('');
-    const [dateFormat, setDateFormat] = useState('DD/MM/YYYY');
     const [categories, setCategories] = useState<string[]>([]);
     const [newCategory, setNewCategory] = useState('');
     const [showAddFieldModal, setShowAddFieldModal] = useState(false);
@@ -27,7 +26,6 @@ export const ExpenseSettingsScreen = () => {
         const data = await settingsService.getExpenseSettings();
         setSettings(data);
         setCategoryLabel(data.categoryLabel);
-        setDateFormat(data.dateFormat);
         setCategories([...data.defaultCategories]);
     };
 
@@ -37,7 +35,6 @@ export const ExpenseSettingsScreen = () => {
         const updated: ExpenseSettings = {
             ...settings,
             categoryLabel,
-            dateFormat,
             defaultCategories: categories,
             customFields: settings.customFields // Include custom fields
         };
@@ -151,24 +148,6 @@ export const ExpenseSettingsScreen = () => {
                             placeholderTextColor={theme.colors.textSecondary}
                         />
                         <Text style={[styles.hint, { color: theme.colors.textSecondary }]}>Change "Category" to any label you prefer</Text>
-                    </View>
-                </View>
-
-                <View style={[styles.section, { backgroundColor: theme.colors.card }]}>
-                    <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Date Format</Text>
-                    <View style={styles.radioGroup}>
-                        {['DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD'].map((format) => (
-                            <TouchableOpacity
-                                key={format}
-                                style={styles.radioOption}
-                                onPress={() => setDateFormat(format)}
-                            >
-                                <View style={[styles.radio, { borderColor: theme.colors.primary }, dateFormat === format && { backgroundColor: theme.colors.primary }]}>
-                                    {dateFormat === format && <View style={[styles.radioDot, { backgroundColor: '#fff' }]} />}
-                                </View>
-                                <Text style={[styles.radioText, { color: theme.colors.text }]}>{format}</Text>
-                            </TouchableOpacity>
-                        ))}
                     </View>
                 </View>
 

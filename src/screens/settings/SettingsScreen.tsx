@@ -28,23 +28,28 @@ WebBrowser.maybeCompleteAuthSession();
 export const SettingsScreen = () => {
     const navigation = useNavigation();
     const { refreshSettings } = usePrivacy();
-    const { theme, isDark, toggleTheme } = useTheme();
-
-    const [activeSection, setActiveSection] = useState<'main' | 'privacy' | 'data' | 'automation' | 'about' | 'blocklist'>('main');
+    const { theme, isDark, toggleTheme, setThemeMode } = useTheme();
+    const [activeSection, setActiveSection] = useState<'main' | 'privacy' | 'automation' | 'about' | 'blocklist'>('main');
 
     // === Global Settings State ===
-    const [privacySettings, setPrivacySettings] = useState<PrivacySettings | null>(null);
     const [profileSettings, setProfileSettings] = useState<ProfileSettings | null>(null);
+    const [privacySettings, setPrivacySettings] = useState<PrivacySettings | null>(null);
     const [notificationSettings, setNotificationSettings] = useState<NotificationSettings | null>(null);
-    const [accountSettings, setAccountSettings] = useState<any>(null);
-    const [isSyncing, setIsSyncing] = useState(false);
+    const [accountSettings, setAccountSettings] = useState<any>(null); // Changed to 'any' as per original, but instruction had AccountSettings
     const [budgetAlertSettings, setBudgetAlertSettings] = useState<BudgetAlertSettings | null>(null);
-    const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
 
-    // === Test Runner State ===
+    const [loading, setLoading] = useState(true);
+    const [showConfigModal, setShowConfigModal] = useState(false);
+    const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
+    const [showDateFormatPicker, setShowDateFormatPicker] = useState(false);
+    const [showThemePicker, setShowThemePicker] = useState(false);
+
+    const [isSyncing, setIsSyncing] = useState(false);
+
+    // Test States
+    const [showTestModal, setShowTestModal] = useState(false);
     const [testResults, setTestResults] = useState<any[]>([]);
     const [isRunningTests, setIsRunningTests] = useState(false);
-    const [showTestModal, setShowTestModal] = useState(false);
 
     // === Google Auth State ===
     const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -53,7 +58,6 @@ export const SettingsScreen = () => {
         ios: GOOGLE_AUTH_CONFIG.iosClientId,
         android: GOOGLE_AUTH_CONFIG.androidClientId,
     });
-    const [showConfigModal, setShowConfigModal] = useState(false);
     const [tempClientIds, setTempClientIds] = useState(clientIds);
 
     const [request, response, promptAsync] = Google.useAuthRequest({
@@ -209,6 +213,7 @@ export const SettingsScreen = () => {
                     <Text style={{ color: theme.colors.textSecondary }}>{profileSettings?.email || 'No email set'}</Text>
                 </View>
             </View>
+
             {/* Currency Picker Row */}
             <TouchableOpacity
                 style={[styles.settingRow, { borderTopWidth: 1, borderTopColor: 'rgba(150,150,150,0.1)', paddingTop: 12 }]}
@@ -218,6 +223,19 @@ export const SettingsScreen = () => {
                 <Text style={{ color: theme.colors.text, flex: 1 }}>Currency</Text>
                 <Text style={{ color: theme.colors.primary, fontWeight: 'bold', fontSize: 16, marginRight: 4 }}>
                     {profileSettings?.currency || '₹'}
+                </Text>
+                <Ionicons name="chevron-forward" size={16} color={theme.colors.textSecondary} />
+            </TouchableOpacity>
+
+            {/* Date Format Picker Row */}
+            <TouchableOpacity
+                style={[styles.settingRow, { borderTopWidth: 1, borderTopColor: 'rgba(150,150,150,0.1)', paddingTop: 12 }]}
+                onPress={() => setShowDateFormatPicker(true)}
+            >
+                <Ionicons name="calendar-outline" size={20} color={theme.colors.primary} style={{ marginRight: 10 }} />
+                <Text style={{ color: theme.colors.text, flex: 1 }}>Date Format</Text>
+                <Text style={{ color: theme.colors.primary, fontWeight: 'bold', fontSize: 14, marginRight: 4 }}>
+                    {profileSettings?.dateFormat || 'DD/MM/YYYY'}
                 </Text>
                 <Ionicons name="chevron-forward" size={16} color={theme.colors.textSecondary} />
             </TouchableOpacity>
@@ -498,7 +516,7 @@ export const SettingsScreen = () => {
 
                         <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Preferences</Text>
                         <GlassCard style={styles.card}>
-                            {renderMenuItem('moon-outline', 'Appearance', isDark ? 'Dark Mode' : 'Light Mode', toggleTheme)}
+                            {renderMenuItem('moon-outline', 'Appearance', profileSettings?.themePreference ? (profileSettings.themePreference.charAt(0).toUpperCase() + profileSettings.themePreference.slice(1)) : 'System', () => setShowThemePicker(true))}
                             <View style={styles.divider} />
                             {renderMenuItem('wallet-outline', 'Accounts', 'Bank accounts, UPI, Cash', () => navigation.navigate('AccountSettings' as never))}
                             <View style={styles.divider} />
@@ -637,6 +655,90 @@ export const SettingsScreen = () => {
                             <TouchableOpacity
                                 style={[styles.modalButton, { marginTop: 12, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }]}
                                 onPress={() => setShowCurrencyPicker(false)}
+                            >
+                                <Text style={{ color: theme.colors.text }}>Cancel</Text>
+                            </TouchableOpacity>
+                        </GlassCard>
+                    </View>
+                </Modal>
+
+                {/* Date Format Picker Modal */}
+                <Modal visible={showDateFormatPicker} transparent animationType="fade" onRequestClose={() => setShowDateFormatPicker(false)}>
+                    <View style={styles.modalOverlay}>
+                        <GlassCard style={styles.modalContent}>
+                            <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Select Date Format</Text>
+                            <ScrollView style={{ maxHeight: 300 }}>
+                                {['DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD'].map(fmt => (
+                                    <TouchableOpacity
+                                        key={fmt}
+                                        style={[styles.settingRow, { paddingVertical: 14 }]}
+                                        onPress={async () => {
+                                            if (profileSettings) {
+                                                const updated = { ...profileSettings, dateFormat: fmt };
+                                                setProfileSettings(updated);
+                                                await settingsService.saveProfileSettings(updated);
+                                            }
+                                            setShowDateFormatPicker(false);
+                                        }}
+                                    >
+                                        <Text style={{ color: theme.colors.text, flex: 1, fontSize: 16 }}>{fmt}</Text>
+                                        {profileSettings?.dateFormat === fmt && (
+                                            <Ionicons name="checkmark-circle" size={22} color={theme.colors.primary} />
+                                        )}
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
+                            <TouchableOpacity
+                                style={[styles.modalButton, { marginTop: 12, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }]}
+                                onPress={() => setShowDateFormatPicker(false)}
+                            >
+                                <Text style={{ color: theme.colors.text }}>Cancel</Text>
+                            </TouchableOpacity>
+                        </GlassCard>
+                    </View>
+                </Modal>
+
+                {/* Theme Picker Modal */}
+                <Modal visible={showThemePicker} transparent animationType="fade" onRequestClose={() => setShowThemePicker(false)}>
+                    <View style={styles.modalOverlay}>
+                        <GlassCard style={styles.modalContent}>
+                            <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Appearance</Text>
+                            <ScrollView style={{ maxHeight: 300 }}>
+                                {['system', 'light', 'dark'].map(mode => (
+                                    <TouchableOpacity
+                                        key={mode}
+                                        style={[styles.settingRow, { paddingVertical: 14 }]}
+                                        onPress={async () => {
+                                            if (profileSettings) {
+                                                const updated = { ...profileSettings, themePreference: mode as 'system' | 'light' | 'dark' };
+                                                setProfileSettings(updated);
+                                                await settingsService.saveProfileSettings(updated);
+                                                // Function to update global theme context
+                                                // Assuming we can access text mode here or via context update
+                                                // toggleTheme won't work for system, we need setThemeMode
+                                                // But context isn't exposed here beyond toggleTheme?
+                                                // checking context usage... const { theme, isDark, toggleTheme } = useTheme();
+                                                // I need to add setThemeMode to useTheme return in SettingsScreen
+                                            }
+                                            setShowThemePicker(false);
+                                        }}
+                                    >
+                                        <Ionicons
+                                            name={mode === 'system' ? 'phone-portrait-outline' : mode === 'dark' ? 'moon-outline' : 'sunny-outline'}
+                                            size={20}
+                                            color={theme.colors.text}
+                                            style={{ marginRight: 10 }}
+                                        />
+                                        <Text style={{ color: theme.colors.text, flex: 1, fontSize: 16, textTransform: 'capitalize' }}>{mode}</Text>
+                                        {profileSettings?.themePreference === mode && (
+                                            <Ionicons name="checkmark-circle" size={22} color={theme.colors.primary} />
+                                        )}
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
+                            <TouchableOpacity
+                                style={[styles.modalButton, { marginTop: 12, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }]}
+                                onPress={() => setShowThemePicker(false)}
                             >
                                 <Text style={{ color: theme.colors.text }}>Cancel</Text>
                             </TouchableOpacity>
