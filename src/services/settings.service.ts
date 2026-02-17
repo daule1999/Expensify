@@ -26,14 +26,12 @@ export interface CustomField {
 
 export interface ExpenseSettings {
   categoryLabel: string; // e.g., "Category" or "Tags"
-  dateFormat: string; // e.g., "MM/DD/YYYY" or "DD/MM/YYYY"
   defaultCategories: string[];
   customFields: CustomField[];
 }
 
 export interface IncomeSettings {
   sourceLabel: string;
-  dateFormat: string;
   defaultSources: string[];
   customFields: CustomField[];
 }
@@ -58,6 +56,8 @@ export interface ProfileSettings {
   name: string;
   email: string;
   currency: string;
+  dateFormat: string; // Global date format preference
+  themePreference: 'system' | 'light' | 'dark';
   avatarUrl?: string;
 }
 
@@ -85,14 +85,12 @@ export interface BudgetAlertSettings {
 
 const DEFAULT_EXPENSE_SETTINGS: ExpenseSettings = {
   categoryLabel: 'Category',
-  dateFormat: 'DD/MM/YYYY',
   defaultCategories: ['Food', 'Transport', 'Shopping', 'Entertainment', 'Bills', 'Health', 'Education', 'Other'],
   customFields: []
 };
 
 const DEFAULT_INCOME_SETTINGS: IncomeSettings = {
   sourceLabel: 'Source',
-  dateFormat: 'DD/MM/YYYY',
   defaultSources: ['Salary', 'Business', 'Freelance', 'Investment', 'Gift', 'Other'],
   customFields: []
 };
@@ -116,6 +114,8 @@ const DEFAULT_PROFILE_SETTINGS: ProfileSettings = {
   name: 'User',
   email: '',
   currency: '₹',
+  dateFormat: 'DD/MM/YYYY',
+  themePreference: 'system',
   avatarUrl: undefined
 };
 

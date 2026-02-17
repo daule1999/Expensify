@@ -6,7 +6,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 import { transactionService, Transaction } from '../../services/transaction.service';
-import { settingsService, ExpenseSettings } from '../../services/settings.service';
+import { settingsService, ExpenseSettings, ProfileSettings } from '../../services/settings.service';
 import { useTheme } from '../../contexts/ThemeContext';
 import { GlassHeader } from '../../components/GlassHeader';
 import { GlassInput } from '../../components/GlassInput';
@@ -27,6 +27,7 @@ export const AddExpenseScreen = () => {
     const [date, setDate] = useState(new Date(transaction ? transaction.date : Date.now()));
     const [loading, setLoading] = useState(false);
     const [settings, setSettings] = useState<ExpenseSettings | null>(null);
+    const [profileSettings, setProfileSettings] = useState<ProfileSettings | null>(null);
     const [customFieldValues, setCustomFieldValues] = useState<{ [key: string]: string }>({});
     const [account, setAccount] = useState(transaction?.account || 'Cash');
     const [showDatePicker, setShowDatePicker] = useState(false);
@@ -37,7 +38,9 @@ export const AddExpenseScreen = () => {
 
     const loadSettings = async () => {
         const data = await settingsService.getExpenseSettings();
+        const profile = await settingsService.getProfileSettings();
         setSettings(data);
+        setProfileSettings(profile);
         if (!transaction && data.defaultCategories.length > 0) {
             setCategory(data.defaultCategories[0]);
         }
@@ -229,7 +232,7 @@ export const AddExpenseScreen = () => {
                         >
                             <Ionicons name="calendar-outline" size={20} color={theme.colors.text} />
                             <Text style={[styles.dateText, { color: theme.colors.text }]}>
-                                {settingsService.formatDate(date.getTime(), settings.dateFormat)}
+                                {settingsService.formatDate(date.getTime(), profileSettings?.dateFormat || 'DD/MM/YYYY')}
                             </Text>
                         </TouchableOpacity>
                     </View>
