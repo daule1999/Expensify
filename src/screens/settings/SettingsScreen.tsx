@@ -7,7 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 
-import { settingsService, PrivacySettings, ProfileSettings, NotificationSettings } from '../../services/settings.service';
+import { settingsService, PrivacySettings, ProfileSettings, NotificationSettings, SUPPORTED_CURRENCIES, BudgetAlertSettings } from '../../services/settings.service';
 import { transactionService } from '../../services/transaction.service';
 import { exportService } from '../../services/export.service';
 import { importService } from '../../services/import.service';
@@ -37,6 +37,8 @@ export const SettingsScreen = () => {
     const [notificationSettings, setNotificationSettings] = useState<NotificationSettings | null>(null);
     const [accountSettings, setAccountSettings] = useState<any>(null);
     const [isSyncing, setIsSyncing] = useState(false);
+    const [budgetAlertSettings, setBudgetAlertSettings] = useState<BudgetAlertSettings | null>(null);
+    const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
 
     // === Test Runner State ===
     const [testResults, setTestResults] = useState<any[]>([]);
@@ -79,10 +81,12 @@ export const SettingsScreen = () => {
         const profile = await settingsService.getProfileSettings();
         const notifications = await settingsService.getNotificationSettings();
         const accounts = await settingsService.getAccountSettings();
+        const budgetAlerts = await settingsService.getBudgetAlertSettings();
         setPrivacySettings(privacy);
         setProfileSettings(profile);
         setNotificationSettings(notifications);
         setAccountSettings(accounts);
+        setBudgetAlertSettings(budgetAlerts);
     };
 
     const loadClientIds = async () => {
@@ -204,6 +208,18 @@ export const SettingsScreen = () => {
                     <Text style={{ color: theme.colors.textSecondary }}>{profileSettings?.email || 'No email set'}</Text>
                 </View>
             </View>
+            {/* Currency Picker Row */}
+            <TouchableOpacity
+                style={[styles.settingRow, { borderTopWidth: 1, borderTopColor: 'rgba(150,150,150,0.1)', paddingTop: 12 }]}
+                onPress={() => setShowCurrencyPicker(true)}
+            >
+                <Ionicons name="cash-outline" size={20} color={theme.colors.primary} style={{ marginRight: 10 }} />
+                <Text style={{ color: theme.colors.text, flex: 1 }}>Currency</Text>
+                <Text style={{ color: theme.colors.primary, fontWeight: 'bold', fontSize: 16, marginRight: 4 }}>
+                    {profileSettings?.currency || '₹'}
+                </Text>
+                <Ionicons name="chevron-forward" size={16} color={theme.colors.textSecondary} />
+            </TouchableOpacity>
         </GlassCard>
     );
 
@@ -222,11 +238,6 @@ export const SettingsScreen = () => {
 
     const renderPrivacySection = () => (
         <View>
-            <TouchableOpacity onPress={() => setActiveSection('main')} style={styles.backButton}>
-                <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
-                <Text style={[styles.backText, { color: theme.colors.text }]}>Back to Settings</Text>
-            </TouchableOpacity>
-
             <Text style={[styles.sectionHeader, { color: theme.colors.text }]}>Privacy & Security</Text>
             <GlassCard style={styles.card}>
                 <View style={styles.settingRow}>
@@ -239,7 +250,26 @@ export const SettingsScreen = () => {
                 </View>
                 <View style={styles.divider} />
                 <View style={styles.settingRow}>
-                    <Text style={{ color: theme.colors.text, flex: 1 }}>Biometric Unlock</Text>
+                    <View style={{ flex: 1 }}>
+                        <Text style={{ color: theme.colors.text }}>Require Password to Unhide</Text>
+                        <Text style={{ color: theme.colors.textSecondary, fontSize: 11, marginTop: 2 }}>Ask for password or biometric before showing amounts</Text>
+                    </View>
+                    <Switch
+                        value={privacySettings?.requirePasswordToUnhide}
+                        onValueChange={(v) => {
+                            if (privacySettings) {
+                                const updated = { ...privacySettings, requirePasswordToUnhide: v };
+                                setPrivacySettings(updated);
+                                settingsService.savePrivacySettings(updated);
+                                refreshSettings();
+                            }
+                        }}
+                        trackColor={{ true: theme.colors.primary, false: theme.colors.border }}
+                    />
+                </View>
+                <View style={styles.divider} />
+                <View style={styles.settingRow}>
+                    <Text style={{ color: theme.colors.text, flex: 1 }}>Use Biometric Unlock</Text>
                     <Switch
                         value={privacySettings?.useBiometric}
                         onValueChange={(v) => {
@@ -247,6 +277,26 @@ export const SettingsScreen = () => {
                                 const updated = { ...privacySettings, useBiometric: v };
                                 setPrivacySettings(updated);
                                 settingsService.savePrivacySettings(updated);
+                                refreshSettings();
+                            }
+                        }}
+                        trackColor={{ true: theme.colors.primary, false: theme.colors.border }}
+                    />
+                </View>
+                <View style={styles.divider} />
+                <View style={styles.settingRow}>
+                    <View style={{ flex: 1 }}>
+                        <Text style={{ color: theme.colors.text }}>Always Hide on Startup</Text>
+                        <Text style={{ color: theme.colors.textSecondary, fontSize: 11, marginTop: 2 }}>Amounts always hidden when app opens</Text>
+                    </View>
+                    <Switch
+                        value={privacySettings?.alwaysHideOnStartup}
+                        onValueChange={(v) => {
+                            if (privacySettings) {
+                                const updated = { ...privacySettings, alwaysHideOnStartup: v };
+                                setPrivacySettings(updated);
+                                settingsService.savePrivacySettings(updated);
+                                refreshSettings();
                             }
                         }}
                         trackColor={{ true: theme.colors.primary, false: theme.colors.border }}
@@ -262,6 +312,7 @@ export const SettingsScreen = () => {
                                 const updated = { ...privacySettings, requireLockOnStartup: v };
                                 setPrivacySettings(updated);
                                 settingsService.savePrivacySettings(updated);
+                                refreshSettings();
                             }
                         }}
                         trackColor={{ true: theme.colors.primary, false: theme.colors.border }}
@@ -273,11 +324,6 @@ export const SettingsScreen = () => {
 
     const renderNotificationSection = () => (
         <View>
-            <TouchableOpacity onPress={() => setActiveSection('main')} style={styles.backButton}>
-                <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
-                <Text style={[styles.backText, { color: theme.colors.text }]}>Back to Settings</Text>
-            </TouchableOpacity>
-
             <Text style={[styles.sectionHeader, { color: theme.colors.text }]}>Notifications</Text>
             <GlassCard style={styles.card}>
                 <View style={styles.settingRow}>
@@ -325,11 +371,6 @@ export const SettingsScreen = () => {
 
     const renderAboutSection = () => (
         <View>
-            <TouchableOpacity onPress={() => setActiveSection('main')} style={styles.backButton}>
-                <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
-                <Text style={[styles.backText, { color: theme.colors.text }]}>Back to Settings</Text>
-            </TouchableOpacity>
-
             <Text style={[styles.sectionHeader, { color: theme.colors.text }]}>About & Help</Text>
 
             <GlassCard style={styles.card}>
@@ -359,11 +400,6 @@ export const SettingsScreen = () => {
 
     const renderBlocklistSection = () => (
         <View>
-            <TouchableOpacity onPress={() => setActiveSection('main')} style={styles.backButton}>
-                <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
-                <Text style={[styles.backText, { color: theme.colors.text }]}>Back to Settings</Text>
-            </TouchableOpacity>
-
             <Text style={[styles.sectionHeader, { color: theme.colors.text }]}>SMS Blocklist</Text>
             <Text style={{ color: theme.colors.textSecondary, marginBottom: 16 }}>
                 Messages from these addresses or containing these keywords will be ignored during sync.
@@ -465,6 +501,8 @@ export const SettingsScreen = () => {
                             <View style={styles.divider} />
                             {renderMenuItem('wallet-outline', 'Accounts', 'Bank accounts, UPI, Cash', () => navigation.navigate('AccountSettings' as never))}
                             <View style={styles.divider} />
+                            {renderMenuItem('pricetags-outline', 'Categories', 'Manage expense & income categories', () => navigation.navigate('CategoryManager' as never))}
+                            <View style={styles.divider} />
                             {renderMenuItem('pie-chart-outline', 'Budgets', 'Set spending limits', () => navigation.navigate('Budgets' as never))}
                             <View style={styles.divider} />
                             {renderMenuItem('shield-checkmark-outline', 'Privacy & Security', 'Biometrics, App Lock', () => setActiveSection('privacy'))}
@@ -519,6 +557,43 @@ export const SettingsScreen = () => {
                                 <Text style={{ color: '#FFF' }}>Sign in with Google</Text>
                             </TouchableOpacity>
                             <TouchableOpacity style={[styles.modalButton, { backgroundColor: theme.colors.card, marginTop: 10 }]} onPress={() => setShowConfigModal(false)}>
+                                <Text style={{ color: theme.colors.text }}>Cancel</Text>
+                            </TouchableOpacity>
+                        </GlassCard>
+                    </View>
+                </Modal>
+
+                {/* Currency Picker Modal */}
+                <Modal visible={showCurrencyPicker} transparent animationType="fade" onRequestClose={() => setShowCurrencyPicker(false)}>
+                    <View style={styles.modalOverlay}>
+                        <GlassCard style={styles.modalContent}>
+                            <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Select Currency</Text>
+                            <ScrollView style={{ maxHeight: 300 }}>
+                                {SUPPORTED_CURRENCIES.map(c => (
+                                    <TouchableOpacity
+                                        key={c.code}
+                                        style={[styles.settingRow, { paddingVertical: 14 }]}
+                                        onPress={async () => {
+                                            if (profileSettings) {
+                                                const updated = { ...profileSettings, currency: c.symbol };
+                                                setProfileSettings(updated);
+                                                await settingsService.saveProfileSettings(updated);
+                                            }
+                                            setShowCurrencyPicker(false);
+                                        }}
+                                    >
+                                        <Text style={{ color: theme.colors.text, fontSize: 18, width: 30 }}>{c.symbol}</Text>
+                                        <Text style={{ color: theme.colors.text, flex: 1, marginLeft: 8 }}>{c.name}</Text>
+                                        {profileSettings?.currency === c.symbol && (
+                                            <Ionicons name="checkmark-circle" size={22} color={theme.colors.primary} />
+                                        )}
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
+                            <TouchableOpacity
+                                style={[styles.modalButton, { marginTop: 12, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }]}
+                                onPress={() => setShowCurrencyPicker(false)}
+                            >
                                 <Text style={{ color: theme.colors.text }}>Cancel</Text>
                             </TouchableOpacity>
                         </GlassCard>

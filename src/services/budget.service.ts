@@ -146,4 +146,18 @@ export const budgetService = {
     const budgets = await budgetService.getAll();
     return budgets.map(b => b.category);
   },
+
+  /**
+   * Check budgets against configured alert thresholds.
+   * Returns budgets that exceed the warning or critical threshold.
+   */
+  checkBudgetAlerts: async (warningPct: number = 75, criticalPct: number = 90): Promise<{
+    warnings: BudgetWithSpending[];
+    criticals: BudgetWithSpending[];
+  }> => {
+    const budgets = await budgetService.getBudgetsWithSpending();
+    const warnings = budgets.filter(b => b.percentage >= warningPct && b.percentage < criticalPct);
+    const criticals = budgets.filter(b => b.percentage >= criticalPct);
+    return { warnings, criticals };
+  },
 };

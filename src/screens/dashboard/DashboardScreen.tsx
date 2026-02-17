@@ -15,6 +15,8 @@ import { transactionService, Transaction } from '../../services/transaction.serv
 import { subscriptionService } from '../../services/subscription.service';
 import { debtService } from '../../services/debt.service';
 import { investmentService } from '../../services/investment.service';
+import { insightsService, InsightsSummary } from '../../services/insights.service';
+import { settingsService } from '../../services/settings.service';
 
 const screenWidth = Dimensions.get('window').width;
 
@@ -34,6 +36,8 @@ export const DashboardScreen = () => {
     const [fixedMonthlyCost, setFixedMonthlyCost] = useState(0);
     const [investedAmount, setInvestedAmount] = useState(0);
     const [debtAmount, setDebtAmount] = useState(0);
+    const [currency, setCurrency] = useState('₹');
+    const [insights, setInsights] = useState<InsightsSummary | null>(null);
 
     const loadData = async () => {
         try {
@@ -72,6 +76,14 @@ export const DashboardScreen = () => {
             setNetWorth((tIncome - tExpense) + totalInvested - totalDebt);
             setFixedMonthlyCost(monthlySubsCost + monthlyDebtCost);
 
+            // Load currency setting
+            const profile = await settingsService.getProfileSettings();
+            setCurrency(profile.currency || '₹');
+
+            // Load insights
+            const insightData = await insightsService.getSummary();
+            setInsights(insightData);
+
         } catch (error) {
             console.error('Failed to load dashboard data', error);
         } finally {
@@ -93,15 +105,15 @@ export const DashboardScreen = () => {
 
     const formatCurrency = (amount: number) => {
         if (isAmountHidden) return '****';
-        return `₹${amount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+        return `${currency}${amount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
     };
 
     const formatCompact = (amount: number) => {
         if (isAmountHidden) return '****';
-        if (Math.abs(amount) >= 10000000) return `₹${(amount / 10000000).toFixed(2)}Cr`;
-        if (Math.abs(amount) >= 100000) return `₹${(amount / 100000).toFixed(2)}L`;
-        if (Math.abs(amount) >= 1000) return `₹${(amount / 1000).toFixed(1)}K`;
-        return `₹${amount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+        if (Math.abs(amount) >= 10000000) return `${currency}${(amount / 10000000).toFixed(2)}Cr`;
+        if (Math.abs(amount) >= 100000) return `${currency}${(amount / 100000).toFixed(2)}L`;
+        if (Math.abs(amount) >= 1000) return `${currency}${(amount / 1000).toFixed(1)}K`;
+        return `${currency}${amount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
     };
 
     // Chart Data Preparation
@@ -166,6 +178,14 @@ export const DashboardScreen = () => {
                         {loading ? <Skeleton width={150} height={40} /> : formatCurrency(netWorth)}
                     </Text>
                 </View>
+
+                {/* Search FAB - top right */}
+                <TouchableOpacity
+                    style={{ position: 'absolute', right: 20, top: 50 }}
+                    onPress={() => navigation.navigate('TransactionSearch' as never)}
+                >
+                    <Ionicons name="search-outline" size={24} color={theme.colors.textSecondary} />
+                </TouchableOpacity>
 
                 {/* Giant Pie Chart Centerpiece */}
                 <View style={styles.chartContainer}>
@@ -301,6 +321,75 @@ export const DashboardScreen = () => {
                             </View>
                         </GlassCard>
                     ))
+                )}
+
+                {/* Spending Insights Card */}
+                {!loading && insights && (
+                    <>
+                        <View style={styles.sectionHeader}>
+                            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Spending Insights</Text>
+                        </View>
+                        <GlassCard style={{ padding: 16, marginBottom: 20 }}>
+                            {/* Monthly Comparison */}
+                            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14 }}>
+                                <Ionicons
+                                    name={insights.monthlyComparison.direction === 'up' ? 'trending-up' : insights.monthlyComparison.direction === 'down' ? 'trending-down' : 'remove-outline'}
+                                    size={28}
+                                    color={insights.monthlyComparison.direction === 'up' ? theme.colors.error : insights.monthlyComparison.direction === 'down' ? theme.colors.success : theme.colors.textSecondary}
+                                />
+                                <View style={{ marginLeft: 12, flex: 1 }}>
+                                    <Text style={{ color: theme.colors.text, fontWeight: '600', fontSize: 15 }}>
+                                        {insights.monthlyComparison.direction === 'up' ? 'Spending Up' : insights.monthlyComparison.direction === 'down' ? 'Spending Down' : 'No Change'} {insights.monthlyComparison.percentChange}%
+                                    </Text>
+                                    <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
+                                        vs last month ({formatCompact(insights.monthlyComparison.lastMonth)})
+                                    </Text>
+                                </View>
+                                <Text style={{ color: theme.colors.text, fontWeight: 'bold', fontSize: 16 }}>
+                                    {formatCompact(insights.monthlyComparison.currentMonth)}
+                                </Text>
+                            </View>
+
+                            {/* Divider */}
+                            <View style={{ height: 1, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)', marginBottom: 14 }} />
+
+                            {/* Stats Row */}
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                                <View style={{ alignItems: 'center', flex: 1 }}>
+                                    <Ionicons name="today-outline" size={20} color={theme.colors.primary} />
+                                    <Text style={{ color: theme.colors.text, fontWeight: '600', marginTop: 4 }}>{formatCompact(insights.dailyAverage)}</Text>
+                                    <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>Daily Avg</Text>
+                                </View>
+                                <View style={{ alignItems: 'center', flex: 1 }}>
+                                    <Ionicons name="leaf-outline" size={20} color={theme.colors.success} />
+                                    <Text style={{ color: theme.colors.text, fontWeight: '600', marginTop: 4 }}>{insights.noSpendDays}/{insights.totalDaysInMonth}</Text>
+                                    <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>No-Spend Days</Text>
+                                </View>
+                                <View style={{ alignItems: 'center', flex: 1 }}>
+                                    <Ionicons name="podium-outline" size={20} color={theme.colors.warning} />
+                                    <Text style={{ color: theme.colors.text, fontWeight: '600', marginTop: 4 }}>{insights.topCategories[0]?.category || '—'}</Text>
+                                    <Text style={{ color: theme.colors.textSecondary, fontSize: 11 }}>Top Category</Text>
+                                </View>
+                            </View>
+
+                            {/* Top Categories Breakdown */}
+                            {insights.topCategories.length > 1 && (
+                                <View style={{ marginTop: 14 }}>
+                                    {insights.topCategories.slice(0, 3).map((cat, idx) => (
+                                        <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={{ color: theme.colors.text, fontSize: 13 }}>{cat.category}</Text>
+                                            </View>
+                                            <View style={{ flex: 2, height: 6, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)', borderRadius: 3, marginHorizontal: 8 }}>
+                                                <View style={{ width: `${cat.percentage}%`, height: '100%', backgroundColor: theme.colors.primary, borderRadius: 3 }} />
+                                            </View>
+                                            <Text style={{ color: theme.colors.textSecondary, fontSize: 12, width: 35, textAlign: 'right' }}>{cat.percentage}%</Text>
+                                        </View>
+                                    ))}
+                                </View>
+                            )}
+                        </GlassCard>
+                    </>
                 )}
 
             </ScrollView>

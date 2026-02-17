@@ -11,18 +11,18 @@ export const generateId = (): string => {
 // Insert default categories
 const insertDefaultCategories = async () => {
   const defaultCategories = [
-    { name: 'Food & Dining', type: 'expense', icon: '🍔', color: '#FF6B6B' },
-    { name: 'Transportation', type: 'expense', icon: '🚗', color: '#4ECDC4' },
-    { name: 'Shopping', type: 'expense', icon: '🛍️', color: '#95E1D3' },
-    { name: 'Entertainment', type: 'expense', icon: '🎬', color: '#F38181' },
-    { name: 'Bills & Utilities', type: 'expense', icon: '💡', color: '#AA96DA' },
-    { name: 'Healthcare', type: 'expense', icon: '🏥', color: '#FCBAD3' },
-    { name: 'Education', type: 'expense', icon: '📚', color: '#A8D8EA' },
-    { name: 'Other', type: 'expense', icon: '📌', color: '#C7CEEA' },
-    { name: 'Salary', type: 'income', icon: '💰', color: '#4CAF50' },
-    { name: 'Business', type: 'income', icon: '💼', color: '#8BC34A' },
-    { name: 'Investments', type: 'income', icon: '📈', color: '#CDDC39' },
-    { name: 'Other Income', type: 'income', icon: '💵', color: '#FFC107' },
+    { name: 'Food & Dining', type: 'expense', icon: 'fast-food-outline', color: '#FF6B6B' },
+    { name: 'Transportation', type: 'expense', icon: 'car-outline', color: '#4ECDC4' },
+    { name: 'Shopping', type: 'expense', icon: 'bag-outline', color: '#95E1D3' },
+    { name: 'Entertainment', type: 'expense', icon: 'film-outline', color: '#F38181' },
+    { name: 'Bills & Utilities', type: 'expense', icon: 'bulb-outline', color: '#AA96DA' },
+    { name: 'Healthcare', type: 'expense', icon: 'medkit-outline', color: '#FCBAD3' },
+    { name: 'Education', type: 'expense', icon: 'school-outline', color: '#A8D8EA' },
+    { name: 'Other', type: 'expense', icon: 'ellipsis-horizontal-outline', color: '#C7CEEA' },
+    { name: 'Salary', type: 'income', icon: 'cash-outline', color: '#4CAF50' },
+    { name: 'Business', type: 'income', icon: 'briefcase-outline', color: '#8BC34A' },
+    { name: 'Investments', type: 'income', icon: 'trending-up-outline', color: '#CDDC39' },
+    { name: 'Other Income', type: 'income', icon: 'wallet-outline', color: '#FFC107' },
   ];
 
   for (const category of defaultCategories) {
@@ -222,6 +222,25 @@ export const initializeDatabase = async () => {
     const result = await db.getFirstAsync('SELECT COUNT(*) as count FROM categories') as { count: number } | null;
     if (result && result.count === 0) {
       await insertDefaultCategories();
+    }
+
+    // Migration: Fix emoji icons in existing categories -> valid Ionicons names
+    const emojiToIcon: Record<string, string> = {
+      '🍔': 'fast-food-outline',
+      '🚗': 'car-outline',
+      '🛍️': 'bag-outline',
+      '🎬': 'film-outline',
+      '💡': 'bulb-outline',
+      '🏥': 'medkit-outline',
+      '📚': 'school-outline',
+      '📌': 'ellipsis-horizontal-outline',
+      '💰': 'cash-outline',
+      '💼': 'briefcase-outline',
+      '📈': 'trending-up-outline',
+      '💵': 'wallet-outline',
+    };
+    for (const [emoji, iconName] of Object.entries(emojiToIcon)) {
+      await db.runAsync('UPDATE categories SET icon = ? WHERE icon = ?', [iconName, emoji]);
     }
 
     // Migration: Add account column to existing tables if not exists

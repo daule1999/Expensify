@@ -4,6 +4,7 @@ import { Alert, Modal, View, Text, TouchableOpacity, StyleSheet, TextInput, AppS
 import * as LocalAuthentication from 'expo-local-authentication';
 import { settingsService, PrivacySettings } from '../services/settings.service';
 import { encryptionService } from '../services/encryption.service';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface PrivacyContextType {
     isAmountHidden: boolean;
@@ -15,14 +16,16 @@ interface PrivacyContextType {
 const PrivacyContext = createContext<PrivacyContextType | undefined>(undefined);
 
 export const PrivacyProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const { theme, isDark } = useTheme();
     const [isAmountHidden, setIsAmountHidden] = useState(false);
     const [privacySettings, setPrivacySettings] = useState<PrivacySettings | null>(null);
     const [showPasswordModal, setShowPasswordModal] = useState(false);
     const [passwordInput, setPasswordInput] = useState('');
+    const [isSettingUpPassword, setIsSettingUpPassword] = useState(false);
 
     // Initial load on mount
     useEffect(() => {
-        loadSettings(true); // pass true for startup
+        loadSettings(true);
     }, []);
 
     // AppState listener
@@ -35,18 +38,13 @@ export const PrivacyProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     const handleAppStateChange = async (nextAppState: AppStateStatus) => {
         if (nextAppState === 'background' || nextAppState === 'inactive') {
-            // Store the background timestamp
             await AsyncStorage.setItem('@last_active_time', Date.now().toString());
         } else if (nextAppState === 'active') {
-            // Check if we should lock based on idle time
             const lastActive = await AsyncStorage.getItem('@last_active_time');
             if (lastActive && privacySettings?.autoLockDelay) {
                 const elapsed = Date.now() - parseInt(lastActive, 10);
                 if (elapsed >= privacySettings.autoLockDelay) {
-                    // Lock the app - we need to communicate this to AppNavigator
-                    // For now, let's just trigger hideAmounts and maybe we need a dedicated 'lock' state
                     setIsAmountHidden(true);
-                    // In a real app, you might navigate to Unlock screen here
                 }
             }
         }
@@ -56,11 +54,9 @@ export const PrivacyProvider: React.FC<{ children: React.ReactNode }> = ({ child
         const settings = await settingsService.getPrivacySettings();
         setPrivacySettings(settings);
 
-        // Only enforce startup-privacy on cold start
         if (isStartup && settings.alwaysHideOnStartup) {
             setIsAmountHidden(true);
         } else if (!isStartup) {
-            // Otherwise follow the stored setting
             setIsAmountHidden(settings.hideAmounts);
         }
     };
@@ -69,58 +65,47 @@ export const PrivacyProvider: React.FC<{ children: React.ReactNode }> = ({ child
         await loadSettings();
     };
 
-    const authenticateWithBiometric = async (): Promise<boolean> => {
-        try {
-            const hasHardware = await LocalAuthentication.hasHardwareAsync();
-            if (!hasHardware) {
-                Alert.alert('Error', 'Biometric authentication not available on this device');
-                return false;
-            }
-
-            const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-            if (!isEnrolled) {
-                Alert.alert('Error', 'No biometric data enrolled. Please set up fingerprint or Face ID in your device settings.');
-                return false;
-            }
-
-            const result = await LocalAuthentication.authenticateAsync({
-                promptMessage: 'Authenticate to view amounts',
-                fallbackLabel: 'Use Password',
-                cancelLabel: 'Cancel',
-            });
-
-            return result.success;
-        } catch (error) {
-            console.error('Biometric auth error:', error);
-            return false;
-        }
-    };
-
     const toggleAmountVisibility = async () => {
-        if (!privacySettings) return;
-
-        // If currently showing amounts and trying to hide, just hide directly
+        // If currently showing and trying to hide — just hide directly
         if (!isAmountHidden) {
             setIsAmountHidden(true);
             return;
         }
 
-        // If currently hidden and trying to show, check authentication requirements
-        if (privacySettings.requirePasswordToUnhide) {
-            // Try biometric first if enabled
-            if (privacySettings.useBiometric) {
-                const authenticated = await authenticateWithBiometric();
-                if (authenticated) {
+        // ALWAYS require authentication to unhide
+        // Step 1: Try biometric if hardware is available
+        try {
+            const hasHardware = await LocalAuthentication.hasHardwareAsync();
+            const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+
+            if (hasHardware && isEnrolled) {
+                const result = await LocalAuthentication.authenticateAsync({
+                    promptMessage: 'Authenticate to view amounts',
+                    fallbackLabel: 'Use Password',
+                    cancelLabel: 'Cancel',
+                });
+
+                if (result.success) {
                     setIsAmountHidden(false);
+                    return;
                 }
-            } else {
-                // Show password modal for global encryption password
-                setShowPasswordModal(true);
+                // Biometric failed/cancelled — fall through to password
             }
-        } else {
-            // No authentication required, direct toggle
-            setIsAmountHidden(false);
+        } catch (error) {
+            console.error('Biometric check error:', error);
         }
+
+        // Step 2: Check if encryption password is set up
+        const isEncryptionSetup = await encryptionService.isSetup();
+        if (!isEncryptionSetup) {
+            setIsSettingUpPassword(true);
+            setShowPasswordModal(true);
+            return;
+        }
+
+        // Step 3: Fall back to password modal
+        setIsSettingUpPassword(false);
+        setShowPasswordModal(true);
     };
 
     const handlePasswordSubmit = async () => {
@@ -129,7 +114,24 @@ export const PrivacyProvider: React.FC<{ children: React.ReactNode }> = ({ child
             return;
         }
 
-        // Verify using global encryption password
+        if (isSettingUpPassword) {
+            if (passwordInput.length < 4) {
+                Alert.alert('Error', 'Password must be at least 4 characters');
+                return;
+            }
+            try {
+                await encryptionService.initialize(passwordInput);
+                Alert.alert('Success', 'Password set! Tap the eye icon again to unlock.');
+                setShowPasswordModal(false);
+                setPasswordInput('');
+                setIsSettingUpPassword(false);
+            } catch (e: any) {
+                Alert.alert('Error', e.message || 'Failed to set password');
+            }
+            return;
+        }
+
+        // Verify using the master encryption password
         const isValid = await encryptionService.unlock(passwordInput);
 
         if (isValid) {
@@ -142,6 +144,22 @@ export const PrivacyProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }
     };
 
+    const dismissModal = () => {
+        setShowPasswordModal(false);
+        setPasswordInput('');
+        setIsSettingUpPassword(false);
+    };
+
+    // Theme-aware colors for modal
+    const modalBg = isDark ? '#1C1C2E' : '#FFFFFF';
+    const modalTextColor = isDark ? '#EAEAEA' : '#1A1A1A';
+    const modalHintColor = isDark ? '#9E9EB8' : '#666666';
+    const modalInputBg = isDark ? '#2A2A3C' : '#F5F5F5';
+    const modalInputBorder = isDark ? '#3A3A50' : '#DDD';
+    const modalInputText = isDark ? '#EAEAEA' : '#1A1A1A';
+    const cancelBg = isDark ? '#2A2A3C' : '#F0F0F0';
+    const cancelTextColor = isDark ? '#BBBBCC' : '#666666';
+
     return (
         <PrivacyContext.Provider value={{ isAmountHidden, toggleAmountVisibility, privacySettings, refreshSettings }}>
             {children}
@@ -150,36 +168,46 @@ export const PrivacyProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 visible={showPasswordModal}
                 transparent
                 animationType="fade"
-                onRequestClose={() => setShowPasswordModal(false)}
+                onRequestClose={dismissModal}
             >
                 <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>Enter Your Password</Text>
-                        <Text style={styles.modalHint}>Use your app encryption password</Text>
+                    <View style={[styles.modalContent, { backgroundColor: modalBg }]}>
+                        <Text style={[styles.modalTitle, { color: modalTextColor }]}>
+                            {isSettingUpPassword ? 'Set Up Password' : 'Enter Your Password'}
+                        </Text>
+                        <Text style={[styles.modalHint, { color: modalHintColor }]}>
+                            {isSettingUpPassword
+                                ? 'Create a password to protect your data (min 4 characters)'
+                                : 'Use your master password'}
+                        </Text>
                         <TextInput
-                            style={styles.modalInput}
+                            style={[styles.modalInput, {
+                                borderColor: modalInputBorder,
+                                backgroundColor: modalInputBg,
+                                color: modalInputText,
+                            }]}
                             value={passwordInput}
                             onChangeText={setPasswordInput}
                             placeholder="Password"
+                            placeholderTextColor={modalHintColor}
                             secureTextEntry
                             autoFocus
                             onSubmitEditing={handlePasswordSubmit}
                         />
                         <View style={styles.modalButtons}>
                             <TouchableOpacity
-                                style={[styles.modalButton, styles.cancelButton]}
-                                onPress={() => {
-                                    setShowPasswordModal(false);
-                                    setPasswordInput('');
-                                }}
+                                style={[styles.modalButton, { backgroundColor: cancelBg }]}
+                                onPress={dismissModal}
                             >
-                                <Text style={styles.cancelButtonText}>Cancel</Text>
+                                <Text style={[styles.modalButtonText, { color: cancelTextColor }]}>Cancel</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={[styles.modalButton, styles.submitButton]}
+                                style={[styles.modalButton, { backgroundColor: theme.colors.primary }]}
                                 onPress={handlePasswordSubmit}
                             >
-                                <Text style={styles.submitButtonText}>Unlock</Text>
+                                <Text style={[styles.modalButtonText, { color: '#FFF' }]}>
+                                    {isSettingUpPassword ? 'Set Password' : 'Unlock'}
+                                </Text>
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -200,36 +228,39 @@ export const usePrivacy = () => {
 const styles = StyleSheet.create({
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        backgroundColor: 'rgba(0,0,0,0.6)',
         justifyContent: 'center',
         alignItems: 'center',
     },
     modalContent: {
-        backgroundColor: '#fff',
-        borderRadius: 12,
+        borderRadius: 16,
         padding: 24,
-        width: '80%',
-        maxWidth: 300,
+        width: '82%',
+        maxWidth: 340,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.3,
+        shadowRadius: 16,
+        elevation: 10,
     },
     modalTitle: {
-        fontSize: 18,
+        fontSize: 19,
         fontWeight: 'bold',
-        marginBottom: 8,
+        marginBottom: 6,
         textAlign: 'center',
     },
     modalHint: {
-        fontSize: 14,
-        color: '#666',
-        marginBottom: 16,
+        fontSize: 13,
+        marginBottom: 18,
         textAlign: 'center',
+        lineHeight: 18,
     },
     modalInput: {
         borderWidth: 1,
-        borderColor: '#ddd',
-        borderRadius: 8,
-        padding: 12,
+        borderRadius: 10,
+        padding: 13,
         fontSize: 16,
-        marginBottom: 16,
+        marginBottom: 18,
     },
     modalButtons: {
         flexDirection: 'row',
@@ -237,22 +268,12 @@ const styles = StyleSheet.create({
     },
     modalButton: {
         flex: 1,
-        padding: 12,
-        borderRadius: 8,
+        padding: 13,
+        borderRadius: 10,
         alignItems: 'center',
     },
-    cancelButton: {
-        backgroundColor: '#f0f0f0',
-    },
-    submitButton: {
-        backgroundColor: '#007AFF',
-    },
-    cancelButtonText: {
-        color: '#666',
+    modalButtonText: {
         fontWeight: '600',
-    },
-    submitButtonText: {
-        color: '#fff',
-        fontWeight: '600',
+        fontSize: 15,
     },
 });

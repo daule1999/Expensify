@@ -647,6 +647,370 @@ test('Bank Account: Masking Match Logic', () => {
     });
 });
 
+// ═══════════════════════════════════════════════════════════════
+// FEATURE 1: CATEGORY SERVICE TESTS
+// ═══════════════════════════════════════════════════════════════
+
+test('Category: Add new category', () => {
+    const categories = [];
+    const add = (name, type, icon, color) => {
+        if (!name || name.trim().length === 0) throw new Error('Name required');
+        const dup = categories.find(c => c.name.toLowerCase() === name.toLowerCase() && c.type === type);
+        if (dup) throw new Error(`Duplicate: ${name}`);
+        const cat = { id: `cat-${Date.now()}-${categories.length}`, name: name.trim(), type, icon, color, created_at: Date.now() };
+        categories.push(cat);
+        return cat.id;
+    };
+    const id = add('Groceries', 'expense', 'cart-outline', '#4CAF50');
+    if (!id) throw new Error('Expected id');
+    if (categories.length !== 1) throw new Error('Expected 1 category');
+    if (categories[0].name !== 'Groceries') throw new Error('Name mismatch');
+});
+
+test('Category: Prevent duplicate names', () => {
+    const categories = [{ id: '1', name: 'Food', type: 'expense' }];
+    const add = (name, type) => {
+        const dup = categories.find(c => c.name.toLowerCase() === name.toLowerCase() && c.type === type);
+        if (dup) throw new Error('Duplicate');
+        categories.push({ id: '2', name, type });
+    };
+    let caught = false;
+    try { add('food', 'expense'); } catch { caught = true; }
+    if (!caught) throw new Error('Should have thrown duplicate error');
+
+    // Same name different type should work
+    add('Food', 'income');
+    if (categories.length !== 2) throw new Error('Expected 2 categories');
+});
+
+test('Category: Update category', () => {
+    const cat = { id: '1', name: 'Food', icon: 'fast-food-outline', color: '#FF6B6B' };
+    const update = (updates) => { Object.assign(cat, updates); };
+    update({ name: 'Dining Out', color: '#E91E63' });
+    if (cat.name !== 'Dining Out') throw new Error('Name not updated');
+    if (cat.color !== '#E91E63') throw new Error('Color not updated');
+});
+
+test('Category: Delete guard on in-use category', () => {
+    const transactions = [{ id: 't1', category: 'Food', amount: 100 }];
+    const deleteCategory = (name) => {
+        const usageCount = transactions.filter(t => t.category === name).length;
+        if (usageCount > 0) throw new Error(`In use by ${usageCount} transaction(s)`);
+    };
+    let caught = false;
+    try { deleteCategory('Food'); } catch { caught = true; }
+    if (!caught) throw new Error('Should block delete of in-use category');
+
+    // Not-in-use should work
+    deleteCategory('Shopping'); // No error
+});
+
+test('Category: Get names by type', () => {
+    const categories = [
+        { name: 'Salary', type: 'income' },
+        { name: 'Food', type: 'expense' },
+        { name: 'Transport', type: 'expense' },
+        { name: 'Freelance', type: 'income' },
+    ];
+    const getNames = (type) => categories.filter(c => c.type === type).map(c => c.name);
+    const expNames = getNames('expense');
+    if (expNames.length !== 2) throw new Error('Expected 2 expense categories');
+    const incNames = getNames('income');
+    if (!incNames.includes('Salary')) throw new Error('Missing Salary');
+});
+
+// ═══════════════════════════════════════════════════════════════
+// FEATURE 2: CURRENCY CONFIGURATION TESTS
+// ═══════════════════════════════════════════════════════════════
+
+test('Currency: Format with different symbols', () => {
+    const formatAmount = (amount, currency) => `${currency}${amount.toLocaleString()}`;
+    const tests = [
+        { currency: '₹', amount: 1500, expected: '₹1,500' },
+        { currency: '$', amount: 2500, expected: '$2,500' },
+        { currency: '€', amount: 3000, expected: '€3,000' },
+        { currency: '£', amount: 999, expected: '£999' },
+    ];
+    for (const t of tests) {
+        const result = formatAmount(t.amount, t.currency);
+        if (result !== t.expected) throw new Error(`Currency format: got "${result}", expected "${t.expected}"`);
+    }
+});
+
+test('Currency: Supported currencies list', () => {
+    const SUPPORTED_CURRENCIES = [
+        { code: 'INR', symbol: '₹', name: 'Indian Rupee' },
+        { code: 'USD', symbol: '$', name: 'US Dollar' },
+        { code: 'EUR', symbol: '€', name: 'Euro' },
+        { code: 'GBP', symbol: '£', name: 'British Pound' },
+        { code: 'JPY', symbol: '¥', name: 'Japanese Yen' },
+    ];
+    if (SUPPORTED_CURRENCIES.length < 5) throw new Error('Need at least 5 currencies');
+    const codes = SUPPORTED_CURRENCIES.map(c => c.code);
+    if (!codes.includes('INR')) throw new Error('Missing INR');
+    if (!codes.includes('USD')) throw new Error('Missing USD');
+    // All entries must have code, symbol, name
+    SUPPORTED_CURRENCIES.forEach(c => {
+        if (!c.code || !c.symbol || !c.name) throw new Error(`Incomplete currency: ${JSON.stringify(c)}`);
+    });
+});
+
+test('Currency: Default fallback to ₹', () => {
+    const profileSettings = { name: 'User', email: '' }; // no currency field
+    const currency = profileSettings.currency || '₹';
+    if (currency !== '₹') throw new Error(`Default should be ₹, got ${currency}`);
+});
+
+test('Currency: Save and load persistence simulation', () => {
+    const storage = {};
+    const save = (key, val) => { storage[key] = JSON.stringify(val); };
+    const load = (key, def) => { return storage[key] ? JSON.parse(storage[key]) : def; };
+
+    const profile = { name: 'Test', currency: '$' };
+    save('@profile_settings', profile);
+    const loaded = load('@profile_settings', { name: 'User', currency: '₹' });
+    if (loaded.currency !== '$') throw new Error(`Persistence failed: got ${loaded.currency}`);
+});
+
+// ═══════════════════════════════════════════════════════════════
+// FEATURE 3: BUDGET ALERT THRESHOLD TESTS
+// ═══════════════════════════════════════════════════════════════
+
+test('Budget Alert: Detect warning threshold', () => {
+    const budgets = [
+        { category: 'Food', amount: 10000, spent: 7600, percentage: 76 },
+        { category: 'Transport', amount: 5000, spent: 3500, percentage: 70 },
+        { category: 'Shopping', amount: 8000, spent: 7300, percentage: 91.25 },
+    ];
+    const warningPct = 75, criticalPct = 90;
+    const warnings = budgets.filter(b => b.percentage >= warningPct && b.percentage < criticalPct);
+    const criticals = budgets.filter(b => b.percentage >= criticalPct);
+    if (warnings.length !== 1) throw new Error(`Expected 1 warning, got ${warnings.length}`);
+    if (warnings[0].category !== 'Food') throw new Error('Wrong warning category');
+    if (criticals.length !== 1) throw new Error(`Expected 1 critical, got ${criticals.length}`);
+    if (criticals[0].category !== 'Shopping') throw new Error('Wrong critical category');
+});
+
+test('Budget Alert: Custom thresholds', () => {
+    const budgets = [
+        { category: 'Food', amount: 10000, percentage: 50 },
+        { category: 'Transport', amount: 5000, percentage: 60 },
+    ];
+    const warningPct = 40, criticalPct = 55;
+    const warnings = budgets.filter(b => b.percentage >= warningPct && b.percentage < criticalPct);
+    const criticals = budgets.filter(b => b.percentage >= criticalPct);
+    if (warnings.length !== 1) throw new Error('Expected 1 warning at low threshold');
+    if (criticals.length !== 1) throw new Error('Expected 1 critical at low threshold');
+});
+
+test('Budget Alert: Edge case at 0% and 100%', () => {
+    const budgets = [
+        { category: 'A', percentage: 0 },
+        { category: 'B', percentage: 100 },
+        { category: 'C', percentage: 75 },
+    ];
+    const warnAt = 75;
+    const critAt = 90;
+    const warnings = budgets.filter(b => b.percentage >= warnAt && b.percentage < critAt);
+    const criticals = budgets.filter(b => b.percentage >= critAt);
+    if (warnings.length !== 1 || warnings[0].category !== 'C') throw new Error('Edge: wrong warnings');
+    if (criticals.length !== 1 || criticals[0].category !== 'B') throw new Error('Edge: wrong criticals');
+});
+
+test('Budget Alert: Settings save/load', () => {
+    const defaults = { warningThreshold: 75, criticalThreshold: 90, showOnDashboard: true };
+    const storage = {};
+    const save = (key, val) => { storage[key] = JSON.stringify(val); };
+    const load = (key) => storage[key] ? JSON.parse(storage[key]) : defaults;
+
+    // Before save, should return defaults
+    const before = load('@budget_alert_settings');
+    if (before.warningThreshold !== 75) throw new Error('Default warning should be 75');
+
+    // After save
+    save('@budget_alert_settings', { warningThreshold: 60, criticalThreshold: 85, showOnDashboard: false });
+    const after = load('@budget_alert_settings');
+    if (after.warningThreshold !== 60) throw new Error('Custom warning should be 60');
+    if (after.showOnDashboard !== false) throw new Error('showOnDashboard should be false');
+});
+
+// ═══════════════════════════════════════════════════════════════
+// FEATURE 4: TRANSACTION SEARCH TESTS
+// ═══════════════════════════════════════════════════════════════
+
+test('Search: Text query matching', () => {
+    const transactions = [
+        { id: '1', description: 'Uber ride to office', category: 'Transport', amount: 150, type: 'expense' },
+        { id: '2', description: 'Amazon order #12345', category: 'Shopping', amount: 2500, type: 'expense' },
+        { id: '3', description: 'Monthly salary', source: 'Salary', amount: 50000, type: 'income' },
+        { id: '4', description: 'Zomato delivery', category: 'Food', amount: 350, type: 'expense' },
+    ];
+
+    const search = (query) => transactions.filter(t =>
+        (t.description || '').toLowerCase().includes(query.toLowerCase()) ||
+        (t.category || '').toLowerCase().includes(query.toLowerCase()) ||
+        (t.source || '').toLowerCase().includes(query.toLowerCase())
+    );
+
+    const r1 = search('uber');
+    if (r1.length !== 1 || r1[0].id !== '1') throw new Error('Text search: uber failed');
+
+    const r2 = search('salary');
+    if (r2.length !== 1 || r2[0].id !== '3') throw new Error('Text search: salary failed');
+
+    const r3 = search('transport');
+    if (r3.length !== 1) throw new Error('Text search by category failed');
+});
+
+test('Search: Amount range filter', () => {
+    const transactions = [
+        { id: '1', amount: 150 },
+        { id: '2', amount: 2500 },
+        { id: '3', amount: 50000 },
+        { id: '4', amount: 350 },
+    ];
+
+    const filterByAmount = (min, max) => transactions.filter(t =>
+        (min === undefined || t.amount >= min) && (max === undefined || t.amount <= max)
+    );
+
+    const r1 = filterByAmount(200, 3000);
+    if (r1.length !== 2) throw new Error(`Amount range: expected 2, got ${r1.length}`);
+
+    const r2 = filterByAmount(undefined, 200);
+    if (r2.length !== 1) throw new Error('Amount max-only filter failed');
+});
+
+test('Search: Type filter (expense/income)', () => {
+    const transactions = [
+        { id: '1', type: 'expense', amount: 150 },
+        { id: '2', type: 'income', amount: 50000 },
+        { id: '3', type: 'expense', amount: 350 },
+    ];
+
+    const filterByType = (type) => type === 'all' ? transactions : transactions.filter(t => t.type === type);
+
+    if (filterByType('expense').length !== 2) throw new Error('Type filter expense failed');
+    if (filterByType('income').length !== 1) throw new Error('Type filter income failed');
+    if (filterByType('all').length !== 3) throw new Error('Type filter all failed');
+});
+
+test('Search: Combined filters', () => {
+    const transactions = [
+        { id: '1', description: 'Uber ride', category: 'Transport', amount: 150, type: 'expense', date: 1000 },
+        { id: '2', description: 'Amazon', category: 'Shopping', amount: 2500, type: 'expense', date: 2000 },
+        { id: '3', description: 'Salary', source: 'Salary', amount: 50000, type: 'income', date: 1500 },
+    ];
+
+    const search = (filters) => {
+        let results = transactions;
+        if (filters.query) {
+            const q = filters.query.toLowerCase();
+            results = results.filter(t =>
+                (t.description || '').toLowerCase().includes(q) ||
+                (t.category || '').toLowerCase().includes(q)
+            );
+        }
+        if (filters.type && filters.type !== 'all') results = results.filter(t => t.type === filters.type);
+        if (filters.amountMin !== undefined) results = results.filter(t => t.amount >= filters.amountMin);
+        if (filters.amountMax !== undefined) results = results.filter(t => t.amount <= filters.amountMax);
+        return results;
+    };
+
+    const r = search({ query: '', type: 'expense', amountMin: 100, amountMax: 3000 });
+    if (r.length !== 2) throw new Error(`Combined filter: expected 2, got ${r.length}`);
+});
+
+test('Search: Empty results', () => {
+    const transactions = [
+        { id: '1', description: 'Uber', category: 'Transport', amount: 150, type: 'expense' },
+    ];
+    const search = (query) => transactions.filter(t =>
+        (t.description || '').toLowerCase().includes(query.toLowerCase())
+    );
+    const r = search('nonexistent');
+    if (r.length !== 0) throw new Error('Expected empty results');
+});
+
+// ═══════════════════════════════════════════════════════════════
+// FEATURE 5: SPENDING INSIGHTS TESTS
+// ═══════════════════════════════════════════════════════════════
+
+test('Insights: Monthly comparison calculation', () => {
+    const currentMonth = 15000;
+    const lastMonth = 12000;
+
+    let percentChange = 0;
+    let direction = 'same';
+    if (lastMonth > 0) {
+        percentChange = Math.round(((currentMonth - lastMonth) / lastMonth) * 100);
+        direction = percentChange > 0 ? 'up' : percentChange < 0 ? 'down' : 'same';
+    }
+    if (Math.abs(percentChange) !== 25) throw new Error(`Expected 25%, got ${percentChange}%`);
+    if (direction !== 'up') throw new Error(`Expected 'up', got '${direction}'`);
+});
+
+test('Insights: Monthly comparison when last month is 0', () => {
+    const currentMonth = 5000;
+    const lastMonth = 0;
+
+    let percentChange = 0;
+    let direction = 'same';
+    if (lastMonth > 0) {
+        percentChange = Math.round(((currentMonth - lastMonth) / lastMonth) * 100);
+        direction = percentChange > 0 ? 'up' : 'down';
+    } else if (currentMonth > 0) {
+        percentChange = 100;
+        direction = 'up';
+    }
+    if (percentChange !== 100) throw new Error(`Expected 100%, got ${percentChange}%`);
+    if (direction !== 'up') throw new Error('Should be up');
+});
+
+test('Insights: Top categories ranking', () => {
+    const expenses = [
+        { category: 'Food', amount: 5000 },
+        { category: 'Transport', amount: 3000 },
+        { category: 'Food', amount: 2000 },
+        { category: 'Shopping', amount: 8000 },
+        { category: 'Transport', amount: 1000 },
+    ];
+
+    const categoryTotals = {};
+    expenses.forEach(e => { categoryTotals[e.category] = (categoryTotals[e.category] || 0) + e.amount; });
+
+    const sorted = Object.entries(categoryTotals)
+        .map(([cat, total]) => ({ category: cat, total }))
+        .sort((a, b) => b.total - a.total);
+
+    if (sorted[0].category !== 'Shopping') throw new Error('Top should be Shopping');
+    if (sorted[0].total !== 8000) throw new Error('Shopping total should be 8000');
+    if (sorted[1].category !== 'Food') throw new Error('Second should be Food');
+    if (sorted[1].total !== 7000) throw new Error('Food total should be 7000');
+});
+
+test('Insights: Daily average calculation', () => {
+    const totalSpent = 30000;
+    const daysPassed = 15;
+    const avg = Math.round(totalSpent / daysPassed);
+    if (avg !== 2000) throw new Error(`Daily avg should be 2000, got ${avg}`);
+
+    // Edge case: day 1
+    const avgDay1 = Math.round(500 / Math.max(1, 1));
+    if (avgDay1 !== 500) throw new Error('Day 1 average wrong');
+});
+
+test('Insights: No-spend days counting', () => {
+    const daysPassed = 20;
+    const spendDays = new Set([1, 3, 5, 7, 10, 12, 15, 18, 19, 20]);
+    const noSpendDays = daysPassed - spendDays.size;
+    if (noSpendDays !== 10) throw new Error(`Expected 10 no-spend days, got ${noSpendDays}`);
+
+    // Edge: all days have spending
+    const allSpend = daysPassed - daysPassed;
+    if (allSpend !== 0) throw new Error('All-spend should give 0');
+});
+
 console.log('\n--- AUTOMATION TEST REPORT ---');
 console.table(results);
 

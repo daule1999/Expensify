@@ -1,5 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// Supported currencies for the currency picker
+export const SUPPORTED_CURRENCIES = [
+  { code: 'INR', symbol: '₹', name: 'Indian Rupee' }
+];
+
 export interface CustomField {
   id: string;
   name: string;
@@ -62,6 +67,12 @@ export interface BankAccount {
   last4: string; // Last 4 digits of account number
 }
 
+export interface BudgetAlertSettings {
+  warningThreshold: number; // Percentage (0-100) e.g. 75
+  criticalThreshold: number; // Percentage (0-100) e.g. 90
+  showOnDashboard: boolean;
+}
+
 const DEFAULT_EXPENSE_SETTINGS: ExpenseSettings = {
   categoryLabel: 'Category',
   dateFormat: 'DD/MM/YYYY',
@@ -113,6 +124,13 @@ const PRIVACY_SETTINGS_KEY = '@privacy_settings';
 const PROFILE_SETTINGS_KEY = '@profile_settings';
 const ACCOUNT_SETTINGS_KEY = '@account_settings';
 const NOTIFICATION_SETTINGS_KEY = '@notification_settings';
+const BUDGET_ALERT_SETTINGS_KEY = '@budget_alert_settings';
+
+const DEFAULT_BUDGET_ALERT_SETTINGS: BudgetAlertSettings = {
+  warningThreshold: 75,
+  criticalThreshold: 90,
+  showOnDashboard: true,
+};
 
 export const settingsService = {
   // Expense Settings
@@ -305,6 +323,26 @@ export const settingsService = {
       await AsyncStorage.setItem(NOTIFICATION_SETTINGS_KEY, JSON.stringify(settings));
     } catch (error) {
       console.error('Failed to save notification settings:', error);
+      throw error;
+    }
+  },
+
+  // Budget Alert Settings
+  getBudgetAlertSettings: async (): Promise<BudgetAlertSettings> => {
+    try {
+      const data = await AsyncStorage.getItem(BUDGET_ALERT_SETTINGS_KEY);
+      return data ? JSON.parse(data) : DEFAULT_BUDGET_ALERT_SETTINGS;
+    } catch (error) {
+      console.error('Failed to load budget alert settings:', error);
+      return DEFAULT_BUDGET_ALERT_SETTINGS;
+    }
+  },
+
+  saveBudgetAlertSettings: async (settings: BudgetAlertSettings): Promise<void> => {
+    try {
+      await AsyncStorage.setItem(BUDGET_ALERT_SETTINGS_KEY, JSON.stringify(settings));
+    } catch (error) {
+      console.error('Failed to save budget alert settings:', error);
       throw error;
     }
   },

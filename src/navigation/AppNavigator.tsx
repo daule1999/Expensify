@@ -29,7 +29,10 @@ import { AddBudgetScreen } from '../screens/budget/AddBudgetScreen';
 import { RecurringScreen } from '../screens/recurring/RecurringScreen';
 import { AddRecurringScreen } from '../screens/recurring/AddRecurringScreen';
 import { OnboardingScreen } from '../screens/onboarding/OnboardingScreen';
+import { CategoryManagerScreen } from '../screens/settings/CategoryManagerScreen';
+import { TransactionSearchScreen } from '../screens/expenses/TransactionSearchScreen';
 import { UnlockScreen } from '../screens/auth/UnlockScreen';
+import { SecuritySetupScreen } from '../screens/auth/SecuritySetupScreen';
 import { encryptionService } from '../services/encryption.service';
 import { settingsService } from '../services/settings.service';
 
@@ -60,7 +63,7 @@ const TabNavigator = () => {
 
 export const AppNavigator = () => {
     const [isLoading, setIsLoading] = useState(true);
-    const [initialRoute, setInitialRoute] = useState<'Onboarding' | 'Unlock' | 'MainTabs'>('Onboarding');
+    const [initialRoute, setInitialRoute] = useState<'Onboarding' | 'Unlock' | 'SecuritySetup' | 'MainTabs'>('Onboarding');
 
     useEffect(() => {
         checkAppStatus();
@@ -73,14 +76,20 @@ export const AppNavigator = () => {
             if (hasOnboarded !== 'true') {
                 setInitialRoute('Onboarding');
             } else {
-                // Check if encryption is set up and if lock is required
+                // Check if encryption/password is set up
                 const isEncrypted = await encryptionService.isSetup();
-                const privacySettings = await settingsService.getPrivacySettings();
 
-                if (isEncrypted && privacySettings.requireLockOnStartup) {
-                    setInitialRoute('Unlock');
+                if (!isEncrypted) {
+                    // User completed onboarding but never set up password
+                    setInitialRoute('SecuritySetup');
                 } else {
-                    setInitialRoute('MainTabs');
+                    // Password exists — check if lock is required
+                    const privacySettings = await settingsService.getPrivacySettings();
+                    if (privacySettings.requireLockOnStartup) {
+                        setInitialRoute('Unlock');
+                    } else {
+                        setInitialRoute('MainTabs');
+                    }
                 }
             }
         } catch (e) {
@@ -112,6 +121,10 @@ export const AppNavigator = () => {
                 <Stack.Screen
                     name="Unlock"
                     component={UnlockScreen}
+                />
+                <Stack.Screen
+                    name="SecuritySetup"
+                    component={SecuritySetupScreen}
                 />
                 <Stack.Screen
                     name="MainTabs"
@@ -184,6 +197,14 @@ export const AppNavigator = () => {
                 <Stack.Screen
                     name="AddRecurring"
                     component={AddRecurringScreen}
+                />
+                <Stack.Screen
+                    name="CategoryManager"
+                    component={CategoryManagerScreen}
+                />
+                <Stack.Screen
+                    name="TransactionSearch"
+                    component={TransactionSearchScreen}
                 />
             </Stack.Navigator>
         </NavigationContainer>
