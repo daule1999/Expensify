@@ -12,6 +12,7 @@ import { transactionService } from '../../services/transaction.service';
 import { exportService } from '../../services/export.service';
 import { importService } from '../../services/import.service';
 import { smsService } from '../../services/sms.service';
+import { backupService } from '../../services/backup.service';
 import { testService } from '../../services/test.service';
 
 import { usePrivacy } from '../../contexts/PrivacyContext';
@@ -555,6 +556,49 @@ export const SettingsScreen = () => {
                             <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Cloud Backup</Text>
                             <TouchableOpacity style={styles.modalButton} onPress={() => { promptAsync(); setShowConfigModal(false); }}>
                                 <Text style={{ color: '#FFF' }}>Sign in with Google</Text>
+                            </TouchableOpacity>
+
+                            <View style={styles.divider} />
+
+                            <TouchableOpacity
+                                style={[styles.modalButton, { backgroundColor: theme.colors.success, marginTop: 10 }]}
+                                onPress={async () => {
+                                    try {
+                                        await backupService.createLocalBackup();
+                                        Alert.alert('Success', 'Backup saved successfully');
+                                    } catch (e: any) {
+                                        Alert.alert('Error', e.message);
+                                    }
+                                    setShowConfigModal(false);
+                                }}
+                            >
+                                <Text style={{ color: '#FFF' }}>Save Local Backup</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={[styles.modalButton, { backgroundColor: theme.colors.warning, marginTop: 10 }]}
+                                onPress={async () => {
+                                    Alert.alert('Restore Backup', 'This will overwrite your current data. Continue?', [
+                                        { text: 'Cancel', style: 'cancel' },
+                                        {
+                                            text: 'Restore',
+                                            style: 'destructive',
+                                            onPress: async () => {
+                                                try {
+                                                    const success = await backupService.restoreLocalBackup();
+                                                    if (success) {
+                                                        Alert.alert('Success', 'Database restored. Please restart the app.');
+                                                    }
+                                                } catch (e: any) {
+                                                    Alert.alert('Error', e.message);
+                                                }
+                                                setShowConfigModal(false);
+                                            }
+                                        }
+                                    ]);
+                                }}
+                            >
+                                <Text style={{ color: '#FFF' }}>Restore from File</Text>
                             </TouchableOpacity>
                             <TouchableOpacity style={[styles.modalButton, { backgroundColor: theme.colors.card, marginTop: 10 }]} onPress={() => setShowConfigModal(false)}>
                                 <Text style={{ color: theme.colors.text }}>Cancel</Text>

@@ -250,6 +250,13 @@ export const DashboardScreen = () => {
                         <Text style={[styles.moduleText, { color: theme.colors.text }]}>Subscriptions</Text>
                     </TouchableOpacity>
 
+                    <TouchableOpacity style={styles.moduleCard} onPress={() => navigation.navigate('Goals' as never)}>
+                        <LinearGradient colors={['#4facfe', '#00f2fe']} style={styles.moduleIcon}>
+                            <Ionicons name="trophy" size={24} color="#FFF" />
+                        </LinearGradient>
+                        <Text style={[styles.moduleText, { color: theme.colors.text }]}>Goals</Text>
+                    </TouchableOpacity>
+
                     <TouchableOpacity style={styles.moduleCard} onPress={() => navigation.navigate('Debts' as never)}>
                         <LinearGradient colors={['#a18cd1', '#fbc2eb']} style={styles.moduleIcon}>
                             <Ionicons name="card" size={24} color="#FFF" />
