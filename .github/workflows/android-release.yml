@@ -73,28 +73,41 @@ jobs:
 
       - name: Update README with latest artifact URL
         run: |
-          REPO="daule1999/Expensify"
-          RUN_ID="${{ github.run_id }}"
-          ARTIFACT_URL="https://github.com/${REPO}/actions/runs/${RUN_ID}/artifacts/${{ steps.artifact.outputs.artifact-id }}"
-          BUILD_DATE="${{ steps.date.outputs.date }}"
+          node << 'NODEEOF'
+          const fs = require('fs');
 
-          # Build the new table content between the markers
-          NEW_TABLE=$(cat <<EOF
-          <!-- BUILD_LINKS_START -->
-          | Link | Description |
-          |------|-------------|
-          | [**Latest Release (APK)**](https://github.com/${REPO}/releases/tag/latest-preview) | Download the latest preview build |
-          | [**Latest Build Artifact**](${ARTIFACT_URL}) | Direct artifact download (Build ${BUILD_DATE}) |
-          | [**All CI Builds**](https://github.com/${REPO}/actions/workflows/android-release.yml) | All build runs |
-          <!-- BUILD_LINKS_END -->
-          EOF
-          )
+          const repo = 'daule1999/Expensify';
+          const runId = process.env.RUN_ID;
+          const artifactId = process.env.ARTIFACT_ID;
+          const buildDate = process.env.BUILD_DATE;
+          const artifactUrl = `https://github.com/${repo}/actions/runs/${runId}/artifacts/${artifactId}`;
 
-          # Remove leading spaces from heredoc
-          NEW_TABLE=$(echo "$NEW_TABLE" | sed 's/^          //')
+          const newBlock = [
+            '<!-- BUILD_LINKS_START -->',
+            '| Link | Description |',
+            '|------|-------------|',
+            `| [**Latest Release (APK)**](https://github.com/${repo}/releases/tag/latest-preview) | Download the latest preview build |`,
+            `| [**Latest Build Artifact**](${artifactUrl}) | Direct artifact download (Build ${buildDate}) |`,
+            `| [**All CI Builds**](https://github.com/${repo}/actions/workflows/android-release.yml) | All build runs |`,
+            '<!-- BUILD_LINKS_END -->'
+          ].join('\n');
 
-          # Replace content between markers in README
-          sed -i '/<!-- BUILD_LINKS_START -->/,/<!-- BUILD_LINKS_END -->/c\'"$(echo "$NEW_TABLE")" README.md
+          let content = fs.readFileSync('README.md', 'utf8');
+          const pattern = /<!-- BUILD_LINKS_START -->[\s\S]*?<!-- BUILD_LINKS_END -->/;
+
+          if (pattern.test(content)) {
+            content = content.replace(pattern, newBlock);
+            fs.writeFileSync('README.md', content);
+            console.log('✅ README updated with artifact URL:', artifactUrl);
+          } else {
+            console.log('❌ BUILD_LINKS markers not found in README.md');
+            process.exit(1);
+          }
+          NODEEOF
+        env:
+          RUN_ID: ${{ github.run_id }}
+          ARTIFACT_ID: ${{ steps.artifact.outputs.artifact-id }}
+          BUILD_DATE: ${{ steps.date.outputs.date }}
 
       - name: Commit and push updated README
         run: |
