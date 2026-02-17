@@ -13,6 +13,8 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
+        with:
+          ref: master
 
       - name: Setup Node.js
         uses: actions/setup-node@v3
@@ -44,6 +46,7 @@ jobs:
           find android -name "*.apk" -path "*/release/*" | head -1 | xargs -I{} cp {} expensify-preview.apk
 
       - name: Upload APK Artifact
+        id: artifact
         uses: actions/upload-artifact@v4
         with:
           name: expensify-preview-apk
@@ -67,3 +70,40 @@ jobs:
           make_latest: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update README with latest artifact URL
+        run: |
+          REPO="daule1999/Expensify"
+          RUN_ID="${{ github.run_id }}"
+          ARTIFACT_URL="https://github.com/${REPO}/actions/runs/${RUN_ID}/artifacts/${{ steps.artifact.outputs.artifact-id }}"
+          BUILD_DATE="${{ steps.date.outputs.date }}"
+
+          # Build the new table content between the markers
+          NEW_TABLE=$(cat <<EOF
+          <!-- BUILD_LINKS_START -->
+          | Link | Description |
+          |------|-------------|
+          | [**Latest Release (APK)**](https://github.com/${REPO}/releases/tag/latest-preview) | Download the latest preview build |
+          | [**Latest Build Artifact**](${ARTIFACT_URL}) | Direct artifact download (Build ${BUILD_DATE}) |
+          | [**All CI Builds**](https://github.com/${REPO}/actions/workflows/android-release.yml) | All build runs |
+          <!-- BUILD_LINKS_END -->
+          EOF
+          )
+
+          # Remove leading spaces from heredoc
+          NEW_TABLE=$(echo "$NEW_TABLE" | sed 's/^          //')
+
+          # Replace content between markers in README
+          sed -i '/<!-- BUILD_LINKS_START -->/,/<!-- BUILD_LINKS_END -->/c\'"$(echo "$NEW_TABLE")" README.md
+
+      - name: Commit and push updated README
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add README.md
+          if git diff --staged --quiet; then
+            echo "No README changes to commit"
+          else
+            git commit -m "docs: update APK download link [skip ci]"
+            git push origin master
+          fi

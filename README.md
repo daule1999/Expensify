@@ -2,6 +2,18 @@
 
 Expensify is a privacy-first, feature-rich personal finance manager built with React Native and Expo. It features automatic SMS parsing, secure local encryption, and comprehensive financial planning tools.
 
+## 📲 Download APK
+
+[![Download Latest APK](https://img.shields.io/badge/Download-APK-brightgreen?style=for-the-badge&logo=android)](https://github.com/daule1999/Expensify/releases/tag/latest-preview)
+
+<!-- BUILD_LINKS_START -->
+| Link | Description |
+|------|-------------|
+| [**Latest Release (APK)**](https://github.com/daule1999/Expensify/releases/tag/latest-preview) | Download the latest preview build |
+| [**Latest Build Artifact**](https://github.com/daule1999/Expensify/actions/workflows/android-release.yml) | Direct artifact download |
+| [**All CI Builds**](https://github.com/daule1999/Expensify/actions/workflows/android-release.yml) | All build runs |
+<!-- BUILD_LINKS_END -->
+
 ## 🌟 Key Features
 - **Auto-SMS Parsing**: Automatically extract transactions from bank SMS alerts using on-device pattern matching.
 - **Privacy First**: All data is stored locally. Encryption uses PBKDF2 key derivation and XOR stream cipher.
