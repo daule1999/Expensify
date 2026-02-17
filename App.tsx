@@ -2,36 +2,22 @@ import React, { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { initializeDatabase } from './src/database';
-import { encryptionService } from './src/services/encryption.service';
-import { backupService } from './src/services/backup.service';
-import { SetupEncryption } from './src/screens/auth/SetupEncryption';
-import { UnlockScreen } from './src/screens/auth/UnlockScreen';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { PrivacyProvider } from './src/contexts/PrivacyContext';
 import { ThemeProvider } from './src/contexts/ThemeContext';
 
 import { AppNavigator } from './src/navigation/AppNavigator';
 
-type AppState = 'loading' | 'setup' | 'locked' | 'unlocked';
-
 export default function App() {
-    const [appState, setAppState] = useState<AppState>('loading');
+    const [isReady, setIsReady] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         const init = async () => {
             try {
-                // Initialize database
                 await initializeDatabase();
                 console.log('Database initialized');
-
-                // Initialize backup service
-                // backupService.initialize() - Not implemented or needed for now
-                console.log('Database initialized');
-
-                // Check encryption status
-                const isSetup = await encryptionService.isSetup();
-                setAppState(isSetup ? 'locked' : 'setup');
+                setIsReady(true);
             } catch (e: any) {
                 console.error('Init error:', e);
                 setError(e.message || 'Initialization failed');
@@ -39,14 +25,6 @@ export default function App() {
         };
         init();
     }, []);
-
-    const handleSetupComplete = () => {
-        setAppState('unlocked');
-    };
-
-    const handleUnlock = () => {
-        setAppState('unlocked');
-    };
 
     if (error) {
         return (
@@ -57,7 +35,7 @@ export default function App() {
         );
     }
 
-    if (appState === 'loading') {
+    if (!isReady) {
         return (
             <View style={[styles.container, styles.centered]}>
                 <ActivityIndicator size="large" color="#007AFF" />
@@ -66,19 +44,12 @@ export default function App() {
         );
     }
 
-    // Determine if the app should be locked based on appState
-    const isLocked = appState === 'locked';
-
     return (
         <ThemeProvider>
             <PrivacyProvider>
                 <SafeAreaProvider>
                     <StatusBar style="auto" />
-                    {isLocked ? (
-                        <UnlockScreen onUnlock={handleUnlock} />
-                    ) : (
-                        <AppNavigator />
-                    )}
+                    <AppNavigator />
                 </SafeAreaProvider>
             </PrivacyProvider>
         </ThemeProvider>
