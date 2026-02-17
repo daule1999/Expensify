@@ -133,15 +133,7 @@ export const DashboardScreen = () => {
         legendFontSize: 12,
     }));
 
-    if (chartData.length === 0) {
-        chartData.push({
-            name: 'No Data',
-            population: 100,
-            color: theme.colors.border,
-            legendFontColor: theme.colors.textSecondary,
-            legendFontSize: 12,
-        });
-    }
+    const hasChartData = chartData.length > 0 && chartData.some(d => d.population > 0);
 
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -188,41 +180,43 @@ export const DashboardScreen = () => {
                 </TouchableOpacity>
 
                 {/* Giant Pie Chart Centerpiece */}
-                <View style={styles.chartContainer}>
-                    {loading ? (
-                        <Skeleton width={screenWidth - 40} height={200} borderRadius={100} />
-                    ) : (
-                        <PieChart
-                            data={chartData}
-                            width={screenWidth - 40}
-                            height={200}
-                            chartConfig={{
-                                color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-                            }}
-                            accessor={"population"}
-                            backgroundColor={"transparent"}
-                            paddingLeft={"0"}
-                            center={[0, 0]}
-                            absolute
-                            hasLegend={false}
-                        />
-                    )}
-                    {/* Custom Legend */}
-                    <View style={styles.legendContainer}>
+                {(loading || hasChartData) && (
+                    <View style={styles.chartContainer}>
                         {loading ? (
-                            [1, 2, 3].map(i => <Skeleton key={i} width={80} height={15} style={{ marginRight: 10, marginBottom: 10 }} />)
+                            <Skeleton width={screenWidth - 40} height={200} borderRadius={100} />
                         ) : (
-                            chartData.map((item, index) => (
-                                <View key={index} style={styles.legendItem}>
-                                    <View style={[styles.legendDot, { backgroundColor: item.color }]} />
-                                    <Text style={[styles.legendText, { color: theme.colors.textSecondary }]} numberOfLines={1}>
-                                        {formatCompact(item.population)} {item.name}
-                                    </Text>
-                                </View>
-                            ))
+                            <PieChart
+                                data={chartData}
+                                width={screenWidth - 40}
+                                height={200}
+                                chartConfig={{
+                                    color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+                                }}
+                                accessor={"population"}
+                                backgroundColor={"transparent"}
+                                paddingLeft={"0"}
+                                center={[0, 0]}
+                                absolute
+                                hasLegend={false}
+                            />
                         )}
+                        {/* Custom Legend */}
+                        <View style={styles.legendContainer}>
+                            {loading ? (
+                                [1, 2, 3].map(i => <Skeleton key={i} width={80} height={15} style={{ marginRight: 10, marginBottom: 10 }} />)
+                            ) : (
+                                chartData.map((item, index) => (
+                                    <View key={index} style={styles.legendItem}>
+                                        <View style={[styles.legendDot, { backgroundColor: item.color }]} />
+                                        <Text style={[styles.legendText, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+                                            {formatCompact(item.population)} {item.name}
+                                        </Text>
+                                    </View>
+                                ))
+                            )}
+                        </View>
                     </View>
-                </View>
+                )}
 
                 {/* Income / Expense Summary Row */}
                 <View style={styles.summaryRow}>
