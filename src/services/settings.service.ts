@@ -68,6 +68,7 @@ export interface AccountSettings {
   customBankIdentifiers: string[]; // User-added SMS sender identifiers
   blockedSenders: string[]; // SMS addresses to ignore entirely
   blockedKeywords: string[]; // Keywords that trigger ignoring a message
+  customBankMap?: { [key: string]: string }; // User-defined Sender ID -> Bank Name mapping
 }
 
 export interface BankAccount {
@@ -126,6 +127,7 @@ const DEFAULT_ACCOUNT_SETTINGS: AccountSettings = {
   customBankIdentifiers: [],
   blockedSenders: [],
   blockedKeywords: ['loan', 'approved', 'pre-approved', 'offer', 'voucher', 'points'],
+  customBankMap: {},
 };
 
 const EXPENSE_SETTINGS_KEY = '@expense_settings';

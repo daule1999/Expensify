@@ -84,6 +84,34 @@ const mockSmsParser = {
 
         return { amount, type, account, merchant, isSelfTransfer, destinationAccount };
     },
+    extractBankName: (senderId, customMap) => {
+        if (!senderId) return undefined;
+        const cleanSender = senderId.toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+        // 1. Check Custom Map First
+        if (customMap) {
+            for (const [key, value] of Object.entries(customMap)) {
+                if (cleanSender.includes(key.toUpperCase())) {
+                    return value;
+                }
+            }
+        }
+
+        // 2. Map of common sender suffixes/prefixes to Bank Names (Simplified for mock)
+        const BANK_MAP = {
+            'HDFCBK': 'HDFC Bank', 'SBI': 'SBI', 'ICICI': 'ICICI Bank',
+            'AXIS': 'Axis Bank', 'KOTAK': 'Kotak Mahindra Bank',
+            'BOB': 'Bank of Baroda', 'PNB': 'Punjab National Bank'
+        };
+
+        for (const [key, value] of Object.entries(BANK_MAP)) {
+            if (cleanSender.includes(key)) {
+                return value;
+            }
+        }
+
+        return undefined;
+    },
     isBlocked: (address, body, settings) => {
         const sender = address.toLowerCase();
         const content = body.toLowerCase();
@@ -1387,6 +1415,35 @@ test('Date: Edge case Feb 28 non-leap', () => {
 test('Date: Leap year Feb 29', () => {
     const d = new Date(2028, 1, 29); // 2028 is a leap year
     if (d.getDate() !== 29 || d.getMonth() !== 1) throw new Error('Leap year Feb 29 failed');
+});
+
+// ═══════════════════════════════════════════════════════════════
+// FEATURE 13: CONFIGURABLE BANK MAP TESTS
+// ═══════════════════════════════════════════════════════════════
+
+test('Bank Map: Detects built-in banks from sender ID', () => {
+    const bank = mockSmsParser.extractBankName('AD-HDFCBK');
+    if (bank !== 'HDFC Bank') throw new Error(`Expected HDFC Bank, got ${bank}`);
+
+    const bank2 = mockSmsParser.extractBankName('VM-SBIINB');
+    if (bank2 !== 'SBI') throw new Error(`Expected SBI, got ${bank2}`);
+});
+
+test('Bank Map: Uses custom map over built-in', () => {
+    const customMap = { 'PUNB': 'Custom National Bank' };
+    const bank = mockSmsParser.extractBankName('AD-PUNBSMS', customMap);
+    if (bank !== 'Custom National Bank') throw new Error(`Expected Custom National Bank, got ${bank}`);
+});
+
+test('Bank Map: Fallback to built-in if custom map has no match', () => {
+    const customMap = { 'XYZ': 'My Bank' };
+    const bank = mockSmsParser.extractBankName('AD-HDFCBK', customMap);
+    if (bank !== 'HDFC Bank') throw new Error(`Expected HDFC Bank fallback, got ${bank}`);
+});
+
+test('Bank Map: Returns undefined for unknown sender', () => {
+    const bank = mockSmsParser.extractBankName('AD-UNKNOW');
+    if (bank !== undefined) throw new Error(`Expected undefined, got ${bank}`);
 });
 
 console.log('\n--- AUTOMATION TEST REPORT ---');

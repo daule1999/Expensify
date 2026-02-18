@@ -137,6 +137,45 @@ export const smsService = {
               }
           }
 
+          // 1.8. Auto-Create Account if Unknown but Bank Name Detectable
+          let accountNameForDb = parsed.account !== 'Unknown' ? `Bank (${parsed.account})` : 'Cash';
+          
+          if (parsed.account !== 'Unknown') {
+              const cleanLast4 = parsed.account.replace(/[xX]/g, '');
+              // Check if account exists
+              const existingAccount = (accountSettings.bankAccounts || []).find(
+                  (a: any) => a.last4 === cleanLast4
+              );
+
+              if (existingAccount) {
+                  accountNameForDb = existingAccount.name;
+              } else {
+                  // No existing account, check if we have a bank name from sender
+                  const bankName = smsParser.extractBankName(sms.address, accountSettings.customBankMap);
+                  if (bankName && cleanLast4.length >= 3) {
+                      // Auto-Create new account
+                      const newAccountName = `${bankName} - ${cleanLast4}`;
+                      const newAccount = {
+                          id: Crypto.randomUUID(),
+                          name: newAccountName,
+                          bankName: bankName,
+                          last4: cleanLast4
+                      };
+
+                      // Add to settings
+                      if (!accountSettings.bankAccounts) accountSettings.bankAccounts = [];
+                      accountSettings.bankAccounts.push(newAccount);
+                      accountSettings.accounts.push(newAccountName);
+                      
+                      // Save immediately so subsequent SMS in this loop use it
+                      await settingsService.saveAccountSettings(accountSettings);
+                      console.log(`[SMS] Auto-created new account: ${newAccountName}`);
+                      
+                      accountNameForDb = newAccountName;
+                  }
+              }
+          }
+
           // 2. Generate Hash for De-duplication
           // Hash = MD5(merchant + amount + date_rounded_to_minute)
           const dateMinute = Math.floor(parsed.date / 60000); 
@@ -175,7 +214,7 @@ export const smsService = {
                       parsed.date,
                       Date.now(),
                       Date.now(),
-                      parsed.account !== 'Unknown' ? `Bank (${parsed.account})` : 'Cash'
+                      accountNameForDb
                   ]
               );
               addedCount++;
@@ -204,7 +243,7 @@ export const smsService = {
                       parsed.date,
                       Date.now(),
                       Date.now(),
-                      parsed.account !== 'Unknown' ? `Bank (${parsed.account})` : 'Cash'
+                      accountNameForDb
                   ]
               );
               addedCount++;
