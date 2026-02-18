@@ -157,12 +157,15 @@ export const smsParser = {
       }
     }
 
+    // 7. Extract Bank Name from Sender ID
+    const bankNameFromSender = smsParser.extractBankName(address);
+
     return {
       amount,
       type,
       merchant,
       account,
-      accountName: smsParser.matchAccountName(account, bankAccountMappings),
+      accountName: smsParser.matchAccountName(account, bankAccountMappings) || (account !== 'Unknown' && bankNameFromSender ? `${bankNameFromSender} - ${account}` : undefined),
       date: timestamp,
       originalSms: body,
       isSelfTransfer,
@@ -179,6 +182,76 @@ export const smsParser = {
     if (cleaned.length < 3) return undefined;
     const match = mappings.find(m => cleaned.endsWith(m.last4) || m.last4.endsWith(cleaned));
     return match?.name;
+  },
+
+  /**
+   * Extract Bank Name from Sender ID (e.g., AD-HDFCBK -> HDFC Bank)
+   */
+  extractBankName: (senderId: string, customMap?: { [key: string]: string }): string | undefined => {
+    if (!senderId) return undefined;
+    const cleanSender = senderId.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    
+    // 1. Check Custom Map First
+    if (customMap) {
+        for (const [key, value] of Object.entries(customMap)) {
+            if (cleanSender.includes(key.toUpperCase())) { // sender includes map key
+                return value;
+            }
+        }
+    }
+
+    // 2. Map of common sender suffixes/prefixes to Bank Names
+    const BANK_MAP: { [key: string]: string } = {
+        'HDFCBK': 'HDFC Bank',
+        'HDFC': 'HDFC Bank',
+        'SBI': 'SBI',
+        'SBIINB': 'SBI',
+        'SBIPSG': 'SBI',
+        'ICICI': 'ICICI Bank',
+        'ICICIB': 'ICICI Bank',
+        'AXIS': 'Axis Bank',
+        'AXISBK': 'Axis Bank',
+        'KOTAK': 'Kotak Mahindra Bank',
+        'KOTAKB': 'Kotak Mahindra Bank',
+        'BOB': 'Bank of Baroda',
+        'BARODA': 'Bank of Baroda',
+        'PNB': 'Punjab National Bank',
+        'PNBSMS': 'Punjab National Bank',
+        'UNION': 'Union Bank',
+        'UBI': 'Union Bank',
+        'CANARA': 'Canara Bank',
+        'INDUS': 'IndusInd Bank',
+        'INDUSB': 'IndusInd Bank',
+        'IDBI': 'IDBI Bank',
+        'IDBIBK': 'IDBI Bank',
+        'RBL': 'RBL Bank',
+        'RBLBNK': 'RBL Bank',
+        'YES': 'Yes Bank',
+        'YESBNK': 'Yes Bank',
+        'FED': 'Federal Bank',
+        'FEDBNK': 'Federal Bank',
+        'PAYTM': 'Paytm Bank',
+        'AIRTEL': 'Airtel Payments Bank',
+        'JIO': 'Jio Payments Bank',
+        'CITI': 'Citi Bank',
+        'CITIBK': 'Citi Bank',
+        'HSBC': 'HSBC',
+        'SC': 'Standard Chartered',
+        'SCBL': 'Standard Chartered',
+        'AMEX': 'American Express',
+        'DBS': 'DBS Bank',
+        'IDFC': 'IDFC First Bank',
+        'IDFCFB': 'IDFC First Bank',
+    };
+
+    // Check for exact matches in the sender ID
+    for (const [key, value] of Object.entries(BANK_MAP)) {
+        if (cleanSender.includes(key)) {
+            return value;
+        }
+    }
+
+    return undefined;
   },
 
   isBankSender: (address: string, customIdentifiers?: string[]): boolean => {

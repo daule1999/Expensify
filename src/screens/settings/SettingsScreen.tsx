@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Switch, Modal, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Switch, Modal, ActivityIndicator, Image } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -195,50 +195,147 @@ export const SettingsScreen = () => {
 
     // === Render Helpers for Sections ===
 
+    const [isEditingProfile, setIsEditingProfile] = useState(false);
+    const [editName, setEditName] = useState('');
+    const [editEmail, setEditEmail] = useState('');
+    const [editAvatar, setEditAvatar] = useState('');
+
+    const startEditingProfile = () => {
+        setEditName(profileSettings?.name || '');
+        setEditEmail(profileSettings?.email || '');
+        setEditAvatar(profileSettings?.avatarUrl || '');
+        setIsEditingProfile(true);
+    };
+
+    const saveProfile = async () => {
+        if (profileSettings) {
+            const updated = {
+                ...profileSettings,
+                name: editName,
+                email: editEmail,
+                avatarUrl: editAvatar
+            };
+            await settingsService.saveProfileSettings(updated);
+            setProfileSettings(updated);
+            setIsEditingProfile(false);
+        }
+    };
+
     const renderMainProfileCard = () => (
         <GlassCard style={styles.card}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
-                <View style={[styles.avatarPlaceholder, { backgroundColor: theme.colors.primary }]}>
-                    <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#FFF' }}>
-                        {profileSettings?.name?.charAt(0) || 'U'}
-                    </Text>
-                </View>
-                <View style={{ marginLeft: 16, flex: 1 }}>
+            {isEditingProfile ? (
+                // EDIT MODE
+                <View>
+                    <Text style={{ color: theme.colors.text, fontSize: 18, fontWeight: 'bold', marginBottom: 16 }}>Edit Profile</Text>
+
+                    <Text style={{ color: theme.colors.textSecondary, marginBottom: 4 }}>Name</Text>
                     <GlassInput
-                        value={profileSettings?.name || ''}
-                        onChangeText={(t) => handleUpdateProfile('name', t)}
+                        value={editName}
+                        onChangeText={setEditName}
                         placeholder="Your Name"
-                        style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 4, height: 40 }}
+                        style={{ marginBottom: 12 }}
                     />
-                    <Text style={{ color: theme.colors.textSecondary }}>{profileSettings?.email || 'No email set'}</Text>
+
+                    <Text style={{ color: theme.colors.textSecondary, marginBottom: 4 }}>Email</Text>
+                    <GlassInput
+                        value={editEmail}
+                        onChangeText={setEditEmail}
+                        placeholder="email@example.com"
+                        keyboardType="email-address"
+                        style={{ marginBottom: 12 }}
+                    />
+
+                    <Text style={{ color: theme.colors.textSecondary, marginBottom: 4 }}>Avatar URL (Optional)</Text>
+                    <GlassInput
+                        value={editAvatar}
+                        onChangeText={setEditAvatar}
+                        placeholder="https://example.com/avatar.png"
+                        style={{ marginBottom: 16 }}
+                    />
+
+                    <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10 }}>
+                        <TouchableOpacity onPress={() => setIsEditingProfile(false)} style={{ padding: 10 }}>
+                            <Text style={{ color: theme.colors.textSecondary }}>Cancel</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={saveProfile}
+                            style={{ backgroundColor: theme.colors.primary, paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8 }}
+                        >
+                            <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Save</Text>
+                        </TouchableOpacity>
+                    </View>
                 </View>
-            </View>
+            ) : (
+                // VIEW MODE
+                <View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+                        {profileSettings?.avatarUrl ? (
+                            <Image
+                                source={{ uri: profileSettings.avatarUrl }}
+                                style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: theme.colors.surface }}
+                            />
+                        ) : (
+                            <View style={[styles.avatarPlaceholder, { backgroundColor: theme.colors.primary, width: 60, height: 60, borderRadius: 30 }]}>
+                                <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#FFF' }}>
+                                    {profileSettings?.name?.charAt(0) || 'U'}
+                                </Text>
+                            </View>
+                        )}
 
-            {/* Currency Picker Row */}
-            <TouchableOpacity
-                style={[styles.settingRow, { borderTopWidth: 1, borderTopColor: 'rgba(150,150,150,0.1)', paddingTop: 12 }]}
-                onPress={() => setShowCurrencyPicker(true)}
-            >
-                <Ionicons name="cash-outline" size={20} color={theme.colors.primary} style={{ marginRight: 10 }} />
-                <Text style={{ color: theme.colors.text, flex: 1 }}>Currency</Text>
-                <Text style={{ color: theme.colors.primary, fontWeight: 'bold', fontSize: 16, marginRight: 4 }}>
-                    {profileSettings?.currency || '₹'}
-                </Text>
-                <Ionicons name="chevron-forward" size={16} color={theme.colors.textSecondary} />
-            </TouchableOpacity>
+                        <View style={{ marginLeft: 16, flex: 1 }}>
+                            <Text style={{ color: theme.colors.text, fontSize: 20, fontWeight: 'bold' }}>
+                                {profileSettings?.name || 'User'}
+                            </Text>
+                            <Text style={{ color: theme.colors.textSecondary, marginTop: 4 }}>
+                                {profileSettings?.email || 'No email set'}
+                            </Text>
+                        </View>
 
-            {/* Date Format Picker Row */}
-            <TouchableOpacity
-                style={[styles.settingRow, { borderTopWidth: 1, borderTopColor: 'rgba(150,150,150,0.1)', paddingTop: 12 }]}
-                onPress={() => setShowDateFormatPicker(true)}
-            >
-                <Ionicons name="calendar-outline" size={20} color={theme.colors.primary} style={{ marginRight: 10 }} />
-                <Text style={{ color: theme.colors.text, flex: 1 }}>Date Format</Text>
-                <Text style={{ color: theme.colors.primary, fontWeight: 'bold', fontSize: 14, marginRight: 4 }}>
-                    {profileSettings?.dateFormat || 'DD/MM/YYYY'}
-                </Text>
-                <Ionicons name="chevron-forward" size={16} color={theme.colors.textSecondary} />
-            </TouchableOpacity>
+                        <TouchableOpacity onPress={startEditingProfile} style={{ padding: 8 }}>
+                            <Ionicons name="pencil" size={20} color={theme.colors.primary} />
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* Currency Picker Row */}
+                    <TouchableOpacity
+                        style={[styles.settingRow, { borderTopWidth: 1, borderTopColor: 'rgba(150,150,150,0.1)', paddingTop: 12 }]}
+                        onPress={() => setShowCurrencyPicker(true)}
+                    >
+                        <Ionicons name="cash-outline" size={20} color={theme.colors.primary} style={{ marginRight: 10 }} />
+                        <Text style={{ color: theme.colors.text, flex: 1 }}>Currency</Text>
+                        <Text style={{ color: theme.colors.primary, fontWeight: 'bold', fontSize: 16, marginRight: 4 }}>
+                            {profileSettings?.currency || '₹'}
+                        </Text>
+                        <Ionicons name="chevron-forward" size={16} color={theme.colors.textSecondary} />
+                    </TouchableOpacity>
+
+                    {/* Date Format Picker Row */}
+                    <TouchableOpacity
+                        style={[styles.settingRow, { borderTopWidth: 1, borderTopColor: 'rgba(150,150,150,0.1)', paddingTop: 12 }]}
+                        onPress={() => setShowDateFormatPicker(true)}
+                    >
+                        <Ionicons name="calendar-outline" size={20} color={theme.colors.primary} style={{ marginRight: 10 }} />
+                        <Text style={{ color: theme.colors.text, flex: 1 }}>Date Format</Text>
+                        <Text style={{ color: theme.colors.primary, fontWeight: 'bold', fontSize: 14, marginRight: 4 }}>
+                            {profileSettings?.dateFormat || 'DD/MM/YYYY'}
+                        </Text>
+                        <Ionicons name="chevron-forward" size={16} color={theme.colors.textSecondary} />
+                    </TouchableOpacity>
+
+                    {/* Theme Picker Row */}
+                    <TouchableOpacity
+                        style={[styles.settingRow, { borderTopWidth: 1, borderTopColor: 'rgba(150,150,150,0.1)', paddingTop: 12 }]}
+                        onPress={() => setShowThemePicker(true)}
+                    >
+                        <Ionicons name="color-palette-outline" size={20} color={theme.colors.primary} style={{ marginRight: 10 }} />
+                        <Text style={{ color: theme.colors.text, flex: 1 }}>Appearance</Text>
+                        <Text style={{ color: theme.colors.primary, fontWeight: 'bold', fontSize: 14, marginRight: 4 }}>
+                            {profileSettings?.themePreference ? profileSettings.themePreference.charAt(0).toUpperCase() + profileSettings.themePreference.slice(1) : 'System'}
+                        </Text>
+                        <Ionicons name="chevron-forward" size={16} color={theme.colors.textSecondary} />
+                    </TouchableOpacity>
+                </View>
+            )}
         </GlassCard>
     );
 
@@ -516,8 +613,6 @@ export const SettingsScreen = () => {
 
                         <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Preferences</Text>
                         <GlassCard style={styles.card}>
-                            {renderMenuItem('moon-outline', 'Appearance', profileSettings?.themePreference ? (profileSettings.themePreference.charAt(0).toUpperCase() + profileSettings.themePreference.slice(1)) : 'System', () => setShowThemePicker(true))}
-                            <View style={styles.divider} />
                             {renderMenuItem('wallet-outline', 'Accounts', 'Bank accounts, UPI, Cash', () => navigation.navigate('AccountSettings' as never))}
                             <View style={styles.divider} />
                             {renderMenuItem('pricetags-outline', 'Categories', 'Manage expense & income categories', () => navigation.navigate('CategoryManager' as never))}

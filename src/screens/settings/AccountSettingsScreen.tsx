@@ -28,6 +28,12 @@ export const AccountSettingsScreen = () => {
     const [showAddIdentifier, setShowAddIdentifier] = useState(false);
     const [newIdentifier, setNewIdentifier] = useState('');
 
+    // Bank Name Mapping
+    const [bankMap, setBankMap] = useState<{ [key: string]: string }>({});
+    const [showAddBankMap, setShowAddBankMap] = useState(false);
+    const [newMapKey, setNewMapKey] = useState('');
+    const [newMapValue, setNewMapValue] = useState('');
+
     useEffect(() => {
         checkBiometrics();
         loadSettings();
@@ -49,6 +55,7 @@ export const AccountSettingsScreen = () => {
         const settings = await settingsService.getAccountSettings();
         setBankAccounts(settings.bankAccounts || []);
         setIdentifiers(settings.customBankIdentifiers || []);
+        setBankMap(settings.customBankMap || {});
     };
 
     const toggleBiometrics = async (value: boolean) => {
@@ -153,6 +160,40 @@ export const AccountSettingsScreen = () => {
         setIdentifiers(settings.customBankIdentifiers);
     };
 
+    // ── Bank Map CRUD ──
+    const handleAddBankMap = async () => {
+        if (!newMapKey.trim() || !newMapValue.trim()) {
+            Alert.alert('Error', 'Both Keyword and Bank Name are required'); return;
+        }
+        const key = newMapKey.trim().toUpperCase();
+        const value = newMapValue.trim();
+
+        const settings = await settingsService.getAccountSettings();
+        const currentMap = settings.customBankMap || {};
+
+        if (currentMap[key]) {
+            Alert.alert('Exists', `Mapping for "${key}" already exists`); return;
+        }
+
+        const updatedMap = { ...currentMap, [key]: value };
+        settings.customBankMap = updatedMap;
+
+        await settingsService.saveAccountSettings(settings);
+        setBankMap(updatedMap);
+        setShowAddBankMap(false);
+        setNewMapKey(''); setNewMapValue('');
+    };
+
+    const handleDeleteBankMap = async (key: string) => {
+        const settings = await settingsService.getAccountSettings();
+        const currentMap = settings.customBankMap || {};
+        const { [key]: deleted, ...rest } = currentMap;
+
+        settings.customBankMap = rest;
+        await settingsService.saveAccountSettings(settings);
+        setBankMap(rest);
+    };
+
     const BUILT_IN_IDENTIFIERS = [
         'SBI', 'HDFC', 'ICICI', 'AXIS', 'KOTAK', 'PAYTM', 'GPAY', 'AMZ',
         'BOB', 'PNB', 'UBI', 'CITI', 'YES', 'IDBI', 'INDUS', 'RBL',
@@ -238,6 +279,40 @@ export const AccountSettingsScreen = () => {
                     >
                         <Ionicons name="add-circle-outline" size={20} color={theme.colors.primary} />
                         <Text style={[styles.addButtonText, { color: theme.colors.primary }]}>Add Identifier</Text>
+                    </TouchableOpacity>
+                </View>
+
+                {/* ─── Custom Bank Name Mapping ─── */}
+                <Text style={[styles.sectionLabel, { color: theme.colors.textSecondary }]}>BANK NAME MAPPING</Text>
+                <View style={[styles.section, { backgroundColor: theme.colors.card }]}>
+                    <Text style={[styles.sectionHint, { color: theme.colors.textSecondary }]}>
+                        Map SMS sender keywords to specific Bank Names (e.g. "PUNB" → "Punjab National Bank").
+                    </Text>
+
+                    {Object.keys(bankMap).length > 0 ? (
+                        <View>
+                            {Object.entries(bankMap).map(([key, value]) => (
+                                <View key={key} style={[styles.settingRow, { borderBottomColor: theme.colors.border }]}>
+                                    <View>
+                                        <Text style={[styles.settingLabel, { color: theme.colors.text }]}>{key}</Text>
+                                        <Text style={[styles.settingDesc, { color: theme.colors.textSecondary }]}>→ {value}</Text>
+                                    </View>
+                                    <TouchableOpacity onPress={() => handleDeleteBankMap(key)}>
+                                        <Ionicons name="trash-outline" size={18} color={theme.colors.error} />
+                                    </TouchableOpacity>
+                                </View>
+                            ))}
+                        </View>
+                    ) : (
+                        <Text style={{ color: theme.colors.textSecondary, fontStyle: 'italic', marginBottom: 12 }}>No custom mappings added.</Text>
+                    )}
+
+                    <TouchableOpacity
+                        style={[styles.addButton, { borderColor: theme.colors.primary }]}
+                        onPress={() => setShowAddBankMap(true)}
+                    >
+                        <Ionicons name="add-circle-outline" size={20} color={theme.colors.primary} />
+                        <Text style={[styles.addButtonText, { color: theme.colors.primary }]}>Add Mapping</Text>
                     </TouchableOpacity>
                 </View>
 
@@ -338,6 +413,42 @@ export const AccountSettingsScreen = () => {
                                 <Text style={[styles.modalBtnText, { color: theme.colors.text }]}>Cancel</Text>
                             </TouchableOpacity>
                             <TouchableOpacity style={[styles.modalBtn, { backgroundColor: theme.colors.primary }]} onPress={handleAddIdentifier}>
+                                <Text style={[styles.modalBtnText, { color: '#FFF' }]}>Add</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </GlassCard>
+                </View>
+            </Modal>
+
+            {/* ─── Add Bank Map Modal ─── */}
+            <Modal visible={showAddBankMap} transparent animationType="fade">
+                <View style={styles.modalOverlay}>
+                    <GlassCard style={styles.modalContent}>
+                        <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Add Bank Mapping</Text>
+                        <Text style={[styles.modalHint, { color: theme.colors.textSecondary }]}>
+                            Map a sender ID part (e.g. "PUNB") to a full Bank Name (e.g. "Punjab National Bank").
+                        </Text>
+
+                        <Text style={[styles.inputLabel, { color: theme.colors.textSecondary }]}>Sender ID Keyword</Text>
+                        <TextInput
+                            style={[styles.modalInput, { backgroundColor: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }]}
+                            value={newMapKey} onChangeText={setNewMapKey}
+                            placeholder="e.g., PUNB" placeholderTextColor={theme.colors.textSecondary}
+                            autoCapitalize="characters"
+                        />
+
+                        <Text style={[styles.inputLabel, { color: theme.colors.textSecondary }]}>Bank Name</Text>
+                        <TextInput
+                            style={[styles.modalInput, { backgroundColor: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }]}
+                            value={newMapValue} onChangeText={setNewMapValue}
+                            placeholder="e.g., Punjab National Bank" placeholderTextColor={theme.colors.textSecondary}
+                        />
+
+                        <View style={styles.modalActions}>
+                            <TouchableOpacity style={[styles.modalBtn, { backgroundColor: theme.colors.surface }]} onPress={() => setShowAddBankMap(false)}>
+                                <Text style={[styles.modalBtnText, { color: theme.colors.text }]}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={[styles.modalBtn, { backgroundColor: theme.colors.primary }]} onPress={handleAddBankMap}>
                                 <Text style={[styles.modalBtnText, { color: '#FFF' }]}>Add</Text>
                             </TouchableOpacity>
                         </View>
